@@ -40,6 +40,8 @@ struct New: AsyncParsableCommand {
     @Flag(name: [.customShort("R"), .long], help: "Rebuild the repository's image first.")
     var rebuild = false
 
+    @OptionGroup var imageOptions: DockerfileOptions
+
     @Option(name: .long, help: "Agent binary to launch inside the sandbox.")
     var agent = "claude"
 

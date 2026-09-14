@@ -35,7 +35,7 @@ struct ImageResolverTests {
     func noDockerfile() throws {
         let temporary = try TemporaryRepository()
         let resolver = ImageResolver(repository: temporary.repository, worktree: temporary.worktree)
-        #expect(resolver.dockerfile() == nil)
+        #expect(try resolver.dockerfile() == nil)
     }
 
     @Test("the repository root is used when the worktree has none")
@@ -43,9 +43,9 @@ struct ImageResolverTests {
         let temporary = try TemporaryRepository()
         try temporary.write("FROM base", to: ".arena/Dockerfile", under: temporary.root)
 
-        let resolver = ImageResolver(repository: temporary.repository, worktree: temporary.worktree)
-        #expect(resolver.dockerfile()?.path.hasPrefix(temporary.root.path) == true)
-        #expect(resolver.dockerfile()?.path.contains(".lane") == false)
+        var resolver = ImageResolver(repository: temporary.repository, worktree: temporary.worktree)
+        #expect(try resolver.dockerfile()?.path.hasPrefix(temporary.root.path) == true)
+        #expect(try resolver.dockerfile()?.path.contains(".lane") == false)
     }
 
     /// The failure ADR-004 records. A Dockerfile written into a worktree was never found,
@@ -57,8 +57,8 @@ struct ImageResolverTests {
         try temporary.write("FROM base", to: ".arena/Dockerfile", under: temporary.root)
         try temporary.write("FROM branch", to: ".arena/Dockerfile", under: temporary.worktree)
 
-        let resolver = ImageResolver(repository: temporary.repository, worktree: temporary.worktree)
-        let found = try #require(resolver.dockerfile())
+        var resolver = ImageResolver(repository: temporary.repository, worktree: temporary.worktree)
+        let found = try #require(try resolver.dockerfile())
         #expect(try String(contentsOf: found, encoding: .utf8) == "FROM branch")
     }
 
@@ -70,15 +70,15 @@ struct ImageResolverTests {
             "git",
             ["-C", temporary.root.path, "config", "arena.dockerfile", "ci/sandbox.Dockerfile"])
 
-        let resolver = ImageResolver(repository: temporary.repository, worktree: temporary.worktree)
-        let found = try #require(resolver.dockerfile())
+        var resolver = ImageResolver(repository: temporary.repository, worktree: temporary.worktree)
+        let found = try #require(try resolver.dockerfile())
         #expect(found.lastPathComponent == "sandbox.Dockerfile")
     }
 
     @Test("git config arena.baseImage overrides the default base")
     func configuredBaseImage() throws {
         let temporary = try TemporaryRepository()
-        let resolver = ImageResolver(repository: temporary.repository, worktree: temporary.worktree)
+        var resolver = ImageResolver(repository: temporary.repository, worktree: temporary.worktree)
         #expect(resolver.baseImage == ImageResolver.defaultBaseImage)
 
         try Shell.run("git", ["-C", temporary.root.path, "config", "arena.baseImage", "mine:v2"])
@@ -99,5 +99,65 @@ struct ImageResolverTests {
         let after = try SHA256.hexDigest(ofFileAt: file)
 
         #expect(before != after)
+    }
+}
+
+@Suite("--dockerfile override")
+struct DockerfileOverrideTests {
+    @Test("an explicit path beats the conventional one")
+    func beatsConvention() throws {
+        let temporary = try TemporaryRepository()
+        try temporary.write("FROM conventional", to: ".arena/Dockerfile", under: temporary.root)
+        try temporary.write("FROM explicit", to: "ci/other.Dockerfile", under: temporary.root)
+
+        var resolver = ImageResolver(
+            repository: temporary.repository, worktree: temporary.worktree)
+        resolver.dockerfileOverride = "ci/other.Dockerfile"
+
+        let found = try #require(try resolver.dockerfile())
+        #expect(try String(contentsOf: found, encoding: .utf8) == "FROM explicit")
+    }
+
+    @Test("an explicit path beats git config too")
+    func beatsGitConfig() throws {
+        let temporary = try TemporaryRepository()
+        try temporary.write("FROM configured", to: "a.Dockerfile", under: temporary.root)
+        try temporary.write("FROM explicit", to: "b.Dockerfile", under: temporary.root)
+        try Shell.run(
+            "git", ["-C", temporary.root.path, "config", "arena.dockerfile", "a.Dockerfile"])
+
+        var resolver = ImageResolver(
+            repository: temporary.repository, worktree: temporary.worktree)
+        resolver.dockerfileOverride = "b.Dockerfile"
+
+        let found = try #require(try resolver.dockerfile())
+        #expect(found.lastPathComponent == "b.Dockerfile")
+    }
+
+    /// The distinction that makes the flag safe: a conventional path that is absent means
+    /// "this repository has no image of its own", but an explicit one that is absent means
+    /// the caller asked for something that is not there.
+    @Test("an explicit path that does not exist is an error, not a fallback")
+    func missingIsAnError() throws {
+        let temporary = try TemporaryRepository()
+        var resolver = ImageResolver(
+            repository: temporary.repository, worktree: temporary.worktree)
+        resolver.dockerfileOverride = "nowhere/Dockerfile"
+
+        #expect(throws: ArenaError.self) { try resolver.dockerfile() }
+    }
+
+    @Test("the worktree is still preferred for a relative explicit path")
+    func relativeStillPrefersWorktree() throws {
+        let temporary = try TemporaryRepository()
+        try temporary.write("FROM root", to: "ci/box.Dockerfile", under: temporary.root)
+        try temporary.write("FROM branch", to: "ci/box.Dockerfile", under: temporary.worktree)
+
+        var resolver = ImageResolver(
+            repository: temporary.repository, worktree: temporary.worktree)
+        resolver.dockerfileOverride = "ci/box.Dockerfile"
+
+        let found = try #require(try resolver.dockerfile())
+        #expect(try String(contentsOf: found, encoding: .utf8) == "FROM branch")
     }
 }

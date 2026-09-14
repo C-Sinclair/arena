@@ -11,7 +11,8 @@
 A repository states the toolchain its sandboxes need by committing `.arena/Dockerfile`, which
 is a `FROM` on top of the shared base image. arena builds it with the repository root as the
 build context and tags it `arena-<repo>:<digest of the Dockerfile>`. Repositories with no such
-file get the base image. The path is overridable with `git config arena.dockerfile`.
+file get the base image. The path is overridable per repository with `git config arena.dockerfile`, and per run with
+`--dockerfile`.
 
 ## Context
 
@@ -50,7 +51,7 @@ Option C, because it puts the toolchain description next to the code that needs 
 because Docker layer caching already solves the "do not redo this" problem that a setup
 command does not.
 
-Two details are load-bearing and were both learned the hard way.
+Three details are load-bearing, and two of them were learned the hard way.
 
 The Dockerfile is looked up in the worktree first and the repository root second. A branch that
 changes its own toolchain should be sandboxed with the image that branch describes, not the
@@ -61,6 +62,12 @@ The tag carries a digest of the Dockerfile rather than `latest`. A per-repositor
 that already exists is indistinguishable from one built by the Dockerfile currently on disk, so
 an edited Dockerfile silently keeps running the old image. Digesting the file makes a changed
 Dockerfile a cache miss by construction.
+
+The third is the asymmetry between the conventional path and an explicit `--dockerfile`. An
+absent `.arena/Dockerfile` means "this repository has no image of its own", so it falls back to
+the base image. An absent `--dockerfile` means the caller asked for something that is not
+there, so it is an error. Falling back there would be the same class of silent wrong answer as
+the two failures above, in a different costume.
 
 ## Consequences
 

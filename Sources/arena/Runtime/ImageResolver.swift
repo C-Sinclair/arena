@@ -15,6 +15,12 @@ struct ImageResolver {
     let repository: Repository
     let worktree: URL
 
+    /// A path from `--dockerfile`, which beats both `arena.dockerfile` and the conventional
+    /// path. Unlike those, a path named here that does not exist is an error rather than a
+    /// fallback to the base image: silently ignoring an explicit request is the failure
+    /// ADR-004 records, in a different costume.
+    var dockerfileOverride: String?
+
     var baseImage: String {
         repository.config("arena.baseImage")
             ?? ProcessInfo.processInfo.environment["ARENA_BASE_IMAGE"]
@@ -24,16 +30,29 @@ struct ImageResolver {
     /// The worktree is checked before the repository root, so a branch that changes its own
     /// Dockerfile is sandboxed with the image that branch describes rather than the default
     /// branch's.
-    func dockerfile() -> URL? {
-        let relative = repository.config("arena.dockerfile") ?? Self.defaultDockerfile
+    func dockerfile() throws -> URL? {
+        if let override = dockerfileOverride {
+            guard let found = locate(override) else {
+                throw ArenaError.buildFailed("no Dockerfile at \(override)")
+            }
+            return found
+        }
+        return locate(repository.config("arena.dockerfile") ?? Self.defaultDockerfile)
+    }
 
-        if relative.hasPrefix("/") {
-            let absolute = URL(fileURLWithPath: relative)
+    /// An absolute path is taken as given. A relative one is looked for in the worktree and
+    /// then the repository root, so a branch that changes its own Dockerfile is sandboxed
+    /// with the image that branch describes rather than the default branch's.
+    private func locate(_ path: String) -> URL? {
+        let expanded = (path as NSString).expandingTildeInPath
+
+        if expanded.hasPrefix("/") {
+            let absolute = URL(fileURLWithPath: expanded)
             return FileManager.default.fileExists(atPath: absolute.path) ? absolute : nil
         }
 
         for base in [worktree, repository.root] {
-            let candidate = base.appendingPathComponent(relative)
+            let candidate = base.appendingPathComponent(expanded)
             if FileManager.default.fileExists(atPath: candidate.path) { return candidate }
         }
         return nil
@@ -44,7 +63,7 @@ struct ImageResolver {
     /// front of us. Tagged `latest`, an edited Dockerfile silently keeps running the old
     /// image, which is exactly the failure this project hit in fish.
     func resolve(rebuild: Bool) throws -> String {
-        guard let dockerfile = dockerfile() else { return try resolveBaseImage() }
+        guard let dockerfile = try dockerfile() else { return try resolveBaseImage() }
 
         let name = "arena-\(repository.name)"
         let tag = String(try SHA256.hexDigest(ofFileAt: dockerfile).prefix(12))

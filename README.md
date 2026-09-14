@@ -71,8 +71,19 @@ That is where a project brings up a service its tests need. State that must outl
 container goes in `/var/lib/arena`, which arena mounts from `~/.arena/state/<repo>`
 ([ADR-006](docs/decisions/ADR-006-project-services-run-inside-the-sandbox.md)).
 
-**arena does not ship a base image.** A repository with no `.arena/Dockerfile` falls back to
-whatever `arena.baseImage` names, and arena will not build it for you:
+The path is overridable three ways, most specific first:
+
+```sh
+arena new e2e --dockerfile ci/sandbox.Dockerfile   # this run only
+git config arena.dockerfile ci/sandbox.Dockerfile  # this repository
+```
+
+A relative `--dockerfile` is looked for in the worktree before the repository root, like the
+conventional path. Unlike it, a `--dockerfile` that does not exist is an error rather than a
+quiet fallback to the base image.
+
+**arena does not ship a base image.** A repository with no Dockerfile falls back to whatever
+`arena.baseImage` names, and arena will not build it for you:
 
 ```sh
 git config arena.baseImage my-agent-base:latest
@@ -142,7 +153,7 @@ where the agents work.
 ## Develop
 
 ```sh
-swift test                                          # 27 tests
+swift test                                          # 31 tests
 swift format lint --recursive --strict Sources Tests
 ./scripts/check-links.sh                            # every relative markdown link resolves
 ```
