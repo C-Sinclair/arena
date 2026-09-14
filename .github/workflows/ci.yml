@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # macOS only, and not a portability oversight: arena links the Security framework for
+    # Keychain access and drives Apple container, neither of which exists on Linux (ADR-003).
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: swift --version
+
+      - name: Build
+        run: swift build --build-tests
+
+      - name: Test
+        run: swift test
+
+  lint:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check formatting
+        run: swift format lint --recursive --strict Sources Tests
+
+      - name: Check markdown links resolve
+        run: ./scripts/check-links.sh
