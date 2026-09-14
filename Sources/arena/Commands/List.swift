@@ -3,8 +3,9 @@ import Foundation
 
 struct List: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "ls",
-        abstract: "List the sandboxes arena is running."
+        commandName: "list",
+        abstract: "List the sandboxes arena is running.",
+        aliases: ["ls"]
     )
 
     @Flag(name: .shortAndLong, help: "Include sandboxes that are not running.")

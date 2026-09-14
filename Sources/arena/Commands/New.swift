@@ -47,7 +47,20 @@ struct New: AsyncParsableCommand {
 
     @OptionGroup var resourceOptions: ResourceOptions
 
+    /// `new` is the default subcommand, so a subcommand arena does not have is parsed as a
+    /// lane name and silently cuts a lane. `arena list` did that before `list` existed as a
+    /// name, building an image to run a lane called "list".
+    static let reservedNames: Set<String> = [
+        "new", "list", "ls", "remove", "rm", "build", "help",
+    ]
+
     func run() async throws {
+        guard !Self.reservedNames.contains(name) else {
+            throw ValidationError(
+                "\(name) is an arena subcommand, not a lane name. Run `arena \(name)`, or "
+                    + "`arena new <name>` to cut a lane.")
+        }
+
         let repository = try Repository.discover()
         let sandbox = name.asContainerID()
         if sandbox != name.replacingOccurrences(of: "/", with: "-") {

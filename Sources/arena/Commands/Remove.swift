@@ -3,8 +3,9 @@ import Foundation
 
 struct Remove: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "rm",
-        abstract: "Stop the sandbox, then delete the lane and its branch."
+        commandName: "remove",
+        abstract: "Stop the sandbox, then delete the lane and its branch.",
+        aliases: ["rm"]
     )
 
     @Argument(help: "Lane name.")
