@@ -39,6 +39,12 @@ struct SandboxHome {
             .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
             ?? ["hasCompletedOnboarding": true, "theme": "dark"]
 
+        // arena launches the agent with --dangerously-skip-permissions, which otherwise opens
+        // a confirmation dialog on every launch. Accepting it is the point of a disposable
+        // sandbox, and the dialog asks for no decision the user has not already made by
+        // running arena.
+        settings["bypassPermissionsModeAccepted"] = true
+
         // The agent asks to trust each new directory, and every lane is a new path, so
         // without this the trust dialog blocks every launch. arena cut this worktree from a
         // repository already on this machine; there is nothing for the prompt to protect.

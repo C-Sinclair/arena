@@ -102,7 +102,9 @@ struct New: AsyncParsableCommand {
             workdir: worktree,
             resources: resourceOptions.resources,
             mounts: try mounts(repository: repository, home: home) + extraMounts(),
-            environment: Self.gitOverrides.merging(try extraEnvironment()) { _, new in new },
+            environment: Self.gitOverrides
+                .merging(Self.terminalOverrides) { _, new in new }
+                .merging(try extraEnvironment()) { _, new in new },
             command: Self.command(agent: agent)
         )
 
@@ -201,6 +203,16 @@ struct New: AsyncParsableCommand {
         "GIT_CONFIG_KEY_0": "commit.gpgsign", "GIT_CONFIG_VALUE_0": "false",
         "GIT_CONFIG_KEY_1": "tag.gpgsign", "GIT_CONFIG_VALUE_1": "false",
         "GIT_CONFIG_KEY_2": "credential.helper", "GIT_CONFIG_VALUE_2": "store",
+    ]
+
+    /// `container run -t` allocates a pty but leaves TERM at `dumb`, so the agent's input
+    /// handling has no terminfo to map an escape sequence with and the arrow keys do
+    /// nothing. The host's own TERM is deliberately not carried: `xterm-ghostty` and its
+    /// like are not in the image's terminfo database, which fails the same way. Pass
+    /// `--env TERM=...` to override.
+    static let terminalOverrides: [String: String] = [
+        "TERM": "xterm-256color",
+        "COLORTERM": "truecolor",
     ]
 
     /// `exec -a` names the pane's foreground process for the agent. Herdr identifies which
