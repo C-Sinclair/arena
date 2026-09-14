@@ -138,3 +138,22 @@ struct ExtraMountTests {
         #expect(specification.hasSuffix("/notes"))
     }
 }
+
+/// The shape is copied from `container image ls --format json` under container 1.3.1. Arena
+/// decoded a top-level `name` and `tag` here, which threw and rebuilt every image.
+@Suite("Image listing decode")
+struct ImageListingTests {
+    static let listing = """
+        [
+          {"configuration":{"name":"arena-demo:abc123"},"id":"sha256:1"},
+          {"configuration":{"name":"docker.io/library/alpine:latest"},"id":"sha256:2"}
+        ]
+        """
+
+    @Test("the reference comes from configuration.name")
+    func decodesReference() throws {
+        let images = try JSONDecoder().decode(
+            [ContainerRuntime.Image].self, from: Data(Self.listing.utf8))
+        #expect(images.map(\.reference) == ["arena-demo:abc123", "docker.io/library/alpine:latest"])
+    }
+}

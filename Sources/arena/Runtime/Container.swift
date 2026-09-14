@@ -35,9 +35,21 @@ enum ContainerRuntime {
         }
     }
 
+    /// `container image ls --format json` carries the reference at `configuration.name`, as
+    /// one `name:tag` string. There is no top-level `name` or `tag`. Decoding for those threw,
+    /// `imageExists` swallowed the error and answered false, and every `arena new` rebuilt an
+    /// image that was already present.
     struct Image: Decodable {
-        let name: String
-        let tag: String
+        let reference: String
+
+        private enum RootKeys: String, CodingKey { case configuration }
+        private enum ConfigKeys: String, CodingKey { case name }
+
+        init(from decoder: Decoder) throws {
+            let root = try decoder.container(keyedBy: RootKeys.self)
+            let config = try root.nestedContainer(keyedBy: ConfigKeys.self, forKey: .configuration)
+            reference = try config.decode(String.self, forKey: .name)
+        }
     }
 
     // MARK: - Queries
@@ -49,11 +61,37 @@ enum ContainerRuntime {
         return try JSONDecoder().decode([Instance].self, from: Data(json.utf8))
     }
 
+    static func images() throws -> [Image] {
+        let json = try Shell.run(binary, ["image", "ls", "--format", "json"])
+        return try JSONDecoder().decode([Image].self, from: Data(json.utf8))
+    }
+
+    /// Answering false rebuilds, so a decode failure here costs a full image build rather
+    /// than an error. Say so on stderr instead of letting it look like a cache miss.
     static func imageExists(name: String, tag: String) -> Bool {
-        guard let json = try? Shell.run(binary, ["image", "ls", "--format", "json"]),
-            let images = try? JSONDecoder().decode([Image].self, from: Data(json.utf8))
-        else { return false }
-        return images.contains { $0.name == name && $0.tag == tag }
+        let listed: [Image]
+        do {
+            listed = try images()
+        } catch {
+            FileHandle.standardError.write(
+                Data("arena: could not read `container image ls`: \(error)\n".utf8))
+            return false
+        }
+
+        let wanted = Self.unqualified(name)
+        return listed.contains { image in
+            let reference = ImageResolver.split(image.reference)
+            return Self.unqualified(reference.name) == wanted && reference.tag == tag
+        }
+    }
+
+    /// An image pulled from Docker Hub is listed registry-qualified, so `alpine:latest` in
+    /// `arena.baseImage` has to match `docker.io/library/alpine:latest`.
+    private static func unqualified(_ name: String) -> String {
+        for prefix in ["docker.io/library/", "docker.io/"] where name.hasPrefix(prefix) {
+            return String(name.dropFirst(prefix.count))
+        }
+        return name
     }
 
     // MARK: - Lifecycle
