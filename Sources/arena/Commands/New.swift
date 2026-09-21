@@ -111,9 +111,7 @@ struct New: AsyncParsableCommand {
         if herdr {
             try launchInHerdr(spec: spec, worktree: worktree)
         } else {
-            let status = try Shell.exec(
-                ContainerRuntime.binary, ContainerRuntime.runArguments(spec: spec))
-            if status != 0 { throw ExitCode(status) }
+            try Shell.replace(ContainerRuntime.binary, ContainerRuntime.runArguments(spec: spec))
         }
     }
 

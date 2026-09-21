@@ -88,6 +88,35 @@ enum Shell {
         return process.terminationStatus
     }
 
+    /// Hand the terminal over for good, by replacing arena's own process.
+    ///
+    /// `Process` puts its child in a new process group, which is a background group for the
+    /// controlling terminal. `container run -t` then takes SIGTTOU setting the pty to raw mode
+    /// and SIGTTIN reading stdin, so the agent draws its interface and accepts no keystroke.
+    /// `execvp` keeps the pid, the process group and the terminal the shell gave arena, so the
+    /// agent is the foreground job exactly as it is when `container run` is typed by hand.
+    static func replace(_ executable: String, _ arguments: [String]) throws -> Never {
+        let path = (searchPath + [ProcessInfo.processInfo.environment["PATH"] ?? ""])
+            .joined(separator: ":")
+        setenv("PATH", path, 1)
+
+        // Anything arena has printed is still in its own stdio buffers when stdout is not a
+        // tty, and exec discards them.
+        fflush(nil)
+
+        let argv = [executable] + arguments
+        var pointers: [UnsafeMutablePointer<CChar>?] = argv.map { strdup($0) }
+        pointers.append(nil)
+        execvp(executable, &pointers)
+
+        // Only reached when the exec itself failed; the image is otherwise already gone.
+        throw CommandFailure(
+            command: argv.joined(separator: " "),
+            status: errno,
+            stderr: String(cString: strerror(errno))
+        )
+    }
+
     /// Exit status only, for the checks where a non-zero is an answer rather than a fault.
     static func succeeds(_ executable: String, _ arguments: [String]) -> Bool {
         (try? run(executable, arguments)) != nil
