@@ -22,6 +22,8 @@ struct Enter: AsyncParsableCommand {
     @Option(name: .long, help: "Agent binary to launch when --agent is given.")
     var agentBinary = "claude"
 
+    static let shellCommand = "exec bash -l"
+
     func run() async throws {
         let sandbox = name.asContainerID()
 
@@ -37,7 +39,7 @@ struct Enter: AsyncParsableCommand {
                     + "entered. `arena new \(name)` launches a fresh one against the same lane.")
         }
 
-        let command = agent ? New.command(agent: agentBinary) : "exec bash -l"
+        let command = agent ? New.command(agent: agentBinary) : Self.shellCommand
         try Shell.replace(
             ContainerRuntime.binary,
             ContainerRuntime.execArguments(
