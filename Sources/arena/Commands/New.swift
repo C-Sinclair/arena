@@ -85,6 +85,7 @@ struct New: AsyncParsableCommand {
 
         let home = try SandboxHome(repository: repository)
         try home.seedAgentSettings(trusting: worktree)
+        try home.linkGlobalAgentConfig()
         try home.writeGitIdentity()
 
         do {
@@ -196,7 +197,7 @@ struct New: AsyncParsableCommand {
         // The global agent configuration is reached through symlinks in ~/.claude pointing
         // into the dotfiles repository. Mounting what they resolve to, read-only, is what
         // lets a host edit reach a sandbox that has been running for days.
-        for entry in ["CLAUDE.md", "agents", "commands", "skills"] {
+        for entry in SandboxHome.globalAgentEntries {
             let link = FileManager.default.homeDirectoryForCurrentUser
                 .appendingPathComponent(".claude/\(entry)")
             guard

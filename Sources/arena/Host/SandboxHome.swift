@@ -28,6 +28,42 @@ struct SandboxHome {
 
     // MARK: - Agent configuration
 
+    /// The entries in the host's `~/.claude` that are symlinks into the dotfiles repository
+    /// and that the agent in the sandbox should read too. `settings.json` is deliberately
+    /// absent: it names MCP servers and hooks that run host binaries, none of which exist in
+    /// a Linux guest.
+    static let globalAgentEntries = ["CLAUDE.md", "agents", "commands", "skills"]
+
+    /// New.mounts puts the directories these resolve to into the container read-only at their
+    /// own host paths, which on its own reaches nothing: the sandbox home is ~/.arena/home,
+    /// not the host's, so `~/.claude/skills` does not exist there and the agent found none of
+    /// the global configuration. Recreating each symlink here is what connects the two, and
+    /// it names the same absolute path inside the container as outside.
+    func linkGlobalAgentConfig() throws {
+        for entry in Self.globalAgentEntries {
+            let link = fileManager.homeDirectoryForCurrentUser
+                .appendingPathComponent(".claude/\(entry)")
+            guard let resolved = try? fileManager.destinationOfSymbolicLink(atPath: link.path)
+            else { continue }
+
+            let target = URL(
+                fileURLWithPath: resolved, relativeTo: link.deletingLastPathComponent()
+            ).standardizedFileURL
+            let destination = root.appendingPathComponent(".claude/\(entry)")
+
+            // Replaced rather than left alone, so retargeting the host symlink reaches the
+            // sandbox. Only a symlink is ever removed; a real file here is the agent's own.
+            if let existing = try? fileManager.destinationOfSymbolicLink(atPath: destination.path) {
+                if existing == target.path { continue }
+                try fileManager.removeItem(at: destination)
+            } else if fileManager.fileExists(atPath: destination.path) {
+                continue
+            }
+
+            try fileManager.createSymbolicLink(at: destination, withDestinationURL: target)
+        }
+    }
+
     private var settingsFile: URL { root.appendingPathComponent(".claude.json") }
 
     /// Seeded once. `hasCompletedOnboarding` is what silences the theme picker. The host's
