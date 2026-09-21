@@ -107,6 +107,8 @@ struct New: AsyncParsableCommand {
             warn("'gh auth token' returned nothing; fetch and push will fail")
         }
 
+        try checkSigningKey(home: home)
+
         let tools = try ToolCache()
         for tool in HostTool.all {
             do {
@@ -162,6 +164,34 @@ struct New: AsyncParsableCommand {
 
         print("arena: removing the stopped sandbox left behind at \(sandbox)")
         ContainerRuntime.remove(sandbox)
+    }
+
+    /// A signing key GitHub does not hold produces commits that push and then show as
+    /// Unverified, which is a thing nobody notices until a reviewer asks. Checked every run
+    /// rather than only on the run that made the key, because registering it is a step
+    /// outside arena and easy to put off.
+    ///
+    /// arena never registers the key itself. Adding a key to a GitHub account is the user's
+    /// to do, and a tool that silently mutates an account is worse than one that prints a
+    /// command.
+    private func checkSigningKey(home: SandboxHome) throws {
+        let key = try home.ensureSigningKey()
+        let registered = Credentials.githubSigningKeys()
+
+        // Compared on type and material, dropping the comment, which GitHub does not store.
+        let material = key.publicKey.split(separator: " ").prefix(2).joined(separator: " ")
+        if let registered, registered.contains(where: { $0.hasPrefix(material) }) { return }
+
+        // Silence on a key that was already there and a check that could not be made would
+        // be wrong in the one case that matters: the token has no admin:ssh_signing_key
+        // scope, so the check always fails, and the key would never be mentioned again.
+        guard registered != nil || key.created else { return }
+
+        warn("the sandbox signing key is not registered with GitHub, so lane commits will")
+        warn("show as Unverified. Register it with:")
+        warn("    gh auth refresh -h github.com -s admin:ssh_signing_key")
+        warn("    gh ssh-key add \(home.root.path)/.ssh/arena_signing_ed25519.pub \\")
+        warn("        --type signing --title 'arena sandbox'")
     }
 
     // MARK: - Assembly
@@ -259,11 +289,20 @@ struct New: AsyncParsableCommand {
     /// in the host's global config and do not. Git then looks for a `gpg` binary the image
     /// has no reason to ship and every commit fails. `GIT_CONFIG_*` is the only tier that
     /// beats a repository-local setting, so the override cannot be a file.
+    /// Signing is on, with the sandbox's own key. `gpg.ssh.program` is deliberately not set,
+    /// which leaves git on `ssh-keygen -Y sign` and the key file below, rather than the
+    /// host's `op-ssh-sign`. The 1Password path cannot work here at all: the binary is
+    /// Mach-O and its agent socket cannot be mounted. See SandboxHome.ensureSigningKey.
     static let gitOverrides: [String: String] = [
-        "GIT_CONFIG_COUNT": "3",
-        "GIT_CONFIG_KEY_0": "commit.gpgsign", "GIT_CONFIG_VALUE_0": "false",
-        "GIT_CONFIG_KEY_1": "tag.gpgsign", "GIT_CONFIG_VALUE_1": "false",
+        "GIT_CONFIG_COUNT": "6",
+        "GIT_CONFIG_KEY_0": "commit.gpgsign", "GIT_CONFIG_VALUE_0": "true",
+        "GIT_CONFIG_KEY_1": "tag.gpgsign", "GIT_CONFIG_VALUE_1": "true",
         "GIT_CONFIG_KEY_2": "credential.helper", "GIT_CONFIG_VALUE_2": "store",
+        "GIT_CONFIG_KEY_3": "gpg.format", "GIT_CONFIG_VALUE_3": "ssh",
+        "GIT_CONFIG_KEY_4": "user.signingkey",
+        "GIT_CONFIG_VALUE_4": SandboxHome.guestSigningKey,
+        "GIT_CONFIG_KEY_5": "gpg.ssh.allowedSignersFile",
+        "GIT_CONFIG_VALUE_5": SandboxHome.guestAllowedSigners,
     ]
 
     /// `container run -t` allocates a pty but leaves TERM at `dumb`, so the agent's input

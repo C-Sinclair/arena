@@ -172,6 +172,64 @@ struct SandboxHome {
         return Date(timeIntervalSince1970: milliseconds / 1000)
     }
 
+    /// Where the sandbox's own signing key sits inside the container.
+    static let guestSigningKey = "/home/agent/.ssh/arena_signing_ed25519"
+    static let guestAllowedSigners = "/home/agent/.ssh/allowed_signers"
+
+    /// A signing key that belongs to the sandbox, generated once and kept in the persistent
+    /// home.
+    ///
+    /// The host signs with 1Password, and neither half of that reaches a Linux guest:
+    /// `op-ssh-sign` is a Mach-O binary, and the agent socket cannot be mounted, because a
+    /// socket shared through `--volume` appears in the guest and then refuses every
+    /// connection. See docs/friction/FF-210926.
+    ///
+    /// A separate key rather than a relay to the host's agent. Relaying would let any agent
+    /// in any lane sign anything with the 1Password key, which is the credential a sandbox
+    /// exists to withhold. The cost is a second key, on disk rather than in 1Password, and
+    /// a public half that has to be registered with GitHub before a lane's commits verify.
+    ///
+    /// Returns the public key, and whether this call was the one that made it.
+    @discardableResult
+    func ensureSigningKey() throws -> (publicKey: String, created: Bool) {
+        let directory = root.appendingPathComponent(".ssh")
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        try fileManager.setAttributes(
+            [.posixPermissions: 0o700], ofItemAtPath: directory.path)
+
+        let key = directory.appendingPathComponent("arena_signing_ed25519")
+        let publicKeyFile = URL(fileURLWithPath: key.path + ".pub")
+
+        var created = false
+        if !fileManager.fileExists(atPath: key.path) {
+            try Shell.run(
+                "ssh-keygen",
+                [
+                    "-t", "ed25519",
+                    "-f", key.path,
+                    "-N", "",
+                    "-C", "arena sandbox signing key",
+                ])
+            created = true
+        }
+        try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: key.path)
+
+        let publicKey = try String(contentsOf: publicKeyFile, encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Without this, every `git log --show-signature` in a lane prints "gpg.ssh.
+        // allowedSignersFile needs to be configured and exist", and `%G?` answers N on a
+        // commit that is signed. An agent reading that concludes signing is broken.
+        let email = (try? Shell.run("git", ["config", "--global", "--get", "user.email"])) ?? ""
+        if !email.isEmpty {
+            try write(
+                "\(email) \(publicKey)\n",
+                to: directory.appendingPathComponent("allowed_signers"))
+        }
+
+        return (publicKey, created)
+    }
+
     /// A file rather than `GH_TOKEN` in the environment. The Herdr path passes its command
     /// to `herdr pane run` as a string, and an environment variable would put the token on
     /// a command line.

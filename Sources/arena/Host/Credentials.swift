@@ -45,6 +45,20 @@ enum Credentials {
         return token
     }
 
+    /// The public halves GitHub holds as *signing* keys, which are a separate list from
+    /// authentication keys: a key registered for auth signs nothing that GitHub will verify.
+    /// Nil when the question could not be asked, so a caller can tell "not registered" from
+    /// "could not check".
+    static func githubSigningKeys() -> [String]? {
+        guard let json = try? Shell.run("gh", ["api", "user/ssh_signing_keys", "--jq", ".[].key"])
+        else { return nil }
+        return
+            json
+            .split(separator: "\n")
+            .map { String($0).trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
+
     static func githubLogin() -> String {
         (try? Shell.run("gh", ["api", "user", "--jq", ".login"])) ?? "x-access-token"
     }
