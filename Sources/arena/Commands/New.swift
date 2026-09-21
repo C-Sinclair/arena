@@ -108,12 +108,14 @@ struct New: AsyncParsableCommand {
         }
 
         let tools = try ToolCache()
-        do {
-            try tools.link(.memex)
-        } catch {
-            // A tool the sandbox does without. Failing the launch over a download would make
-            // arena useless on a train.
-            warn("\(error)")
+        for tool in HostTool.all {
+            do {
+                try tools.link(tool)
+            } catch {
+                // A tool the sandbox does without. Failing the launch over one download
+                // would make arena useless on a train.
+                warn("\(error)")
+            }
         }
 
         let spec = SandboxSpec(
