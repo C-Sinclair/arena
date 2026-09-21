@@ -15,7 +15,7 @@ struct Arena: AsyncParsableCommand {
             image provides /usr/local/bin/arena-init, arena runs it before the agent starts.
             """,
         version: "0.1.0",
-        subcommands: [New.self, List.self, Remove.self, Build.self],
+        subcommands: [New.self, Enter.self, List.self, Remove.self, Build.self],
         defaultSubcommand: New.self
     )
 }

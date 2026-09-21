@@ -119,4 +119,22 @@ enum ContainerRuntime {
         args += ["-i", "-t", spec.image, "bash", "-lc", spec.command]
         return args
     }
+
+    /// A second process in a sandbox that is already up. `container exec` takes none of the
+    /// mounts or resources, which the running container already has, so this shares only the
+    /// pty flags and the environment the agent needs with `runArguments`.
+    static func execArguments(
+        id: String,
+        workdir: URL?,
+        environment: [String: String],
+        command: String
+    ) -> [String] {
+        var args = ["exec", "-i", "-t"]
+        if let workdir { args += ["--workdir", workdir.path] }
+        for (key, value) in environment.sorted(by: { $0.key < $1.key }) {
+            args += ["--env", "\(key)=\(value)"]
+        }
+        args += [id, "bash", "-lc", command]
+        return args
+    }
 }

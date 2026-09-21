@@ -67,6 +67,8 @@ struct New: AsyncParsableCommand {
             print("arena: name too long for a container id; using \(sandbox)")
         }
 
+        try Self.clearSandbox(named: sandbox, lane: name)
+
         let worktree: URL
         if let existing = repository.lanePath(name) {
             print("arena: reusing existing lane at \(existing.path)")
@@ -113,6 +115,25 @@ struct New: AsyncParsableCommand {
         } else {
             try Shell.replace(ContainerRuntime.binary, ContainerRuntime.runArguments(spec: spec))
         }
+    }
+
+    /// `container run --name` fails outright when the name is taken, and the message names
+    /// only the id. A sandbox still running is the one the user already has, so say how to
+    /// join it rather than cutting the lane again. A stopped one is a leftover: arena runs
+    /// with --rm, so a container in any other state is the wreckage of a run that did not
+    /// tear itself down, and removing it is what lets this launch proceed.
+    private static func clearSandbox(named sandbox: String, lane: String) throws {
+        guard let instance = try? ContainerRuntime.instances().first(where: { $0.id == sandbox })
+        else { return }
+
+        guard instance.state != "running" else {
+            throw ArenaError.laneFailed(
+                "sandbox \(sandbox) is already running. `arena enter \(lane)` opens a shell in "
+                    + "it, and `arena remove \(lane)` tears it down.")
+        }
+
+        print("arena: removing the stopped sandbox left behind at \(sandbox)")
+        ContainerRuntime.remove(sandbox)
     }
 
     // MARK: - Assembly
