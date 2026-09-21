@@ -19,3 +19,4 @@ Start from [`FF-000-TEMPLATE.md`](FF-000-TEMPLATE.md). Naming is `FF-DDMMYY-keba
 | [FF-140926](FF-140926-container-defaults-strand-chromium.md) | apple/container, not filed | A 64 MB `/dev/shm` kills Chromium with `Target closed` and no attributable error |
 | [FF-140926](FF-140926-noble-git-cannot-read-relative-worktrees.md) | none | Ubuntu noble's git 2.43 refuses every command in a worktree using `extensions.relativeWorktrees` |
 | [FF-210926](FF-210926-memex-index-is-version-locked.md) | nicosuave/memex, not filed | An upgraded memex cannot read its own index, and `memex search` fails on a read-only one |
+| [FF-210926](FF-210926-a-mounted-unix-socket-cannot-be-connected-to.md) | apple/container, not filed | A mounted socket shows in the guest and refuses `connect`; mounting a sandboxed macOS path wedges the runtime |
