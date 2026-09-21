@@ -59,6 +59,22 @@ struct Repository {
         Self.lane(in: lanes(), containing: directory)
     }
 
+    /// The lane the shell is standing in, for the commands that take no name.
+    ///
+    /// Being outside every lane is an error naming the lanes there are, rather than a
+    /// guess: acting on the wrong lane is worse than being told to name one.
+    func currentLane() throws -> Lane {
+        let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        if let lane = lane(containing: cwd) { return lane }
+
+        let names = lanes().map(\.name).sorted()
+        let known =
+            names.isEmpty
+            ? "\(name) has no lanes."
+            : "Lanes here: \(names.joined(separator: ", "))."
+        throw ArenaError.laneFailed("\(cwd.path) is not inside a lane. \(known)")
+    }
+
     static func lane(in lanes: [Lane], containing directory: URL) -> Lane? {
         let target = directory.standardizedFileURL.path
         return

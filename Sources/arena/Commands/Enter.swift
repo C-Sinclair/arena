@@ -10,10 +10,10 @@ struct Enter: AsyncParsableCommand {
             one that is still up; it does not restart a sandbox that has exited. Cut that \
             lane again with `arena new <name>`, which reuses the worktree.
 
-            With no name, the lane is the one the working directory is in, so `arena @` from \
-            inside a lane attaches to that lane's sandbox.
+            With no name, the lane is the one the working directory is in. `arena @` takes \
+            the lane from there too, but launches a sandbox when none is running.
             """,
-        aliases: ["attach", "@"]
+        aliases: ["attach"]
     )
 
     @Argument(help: "Lane name. Defaults to the lane the working directory is in.")
@@ -54,21 +54,9 @@ struct Enter: AsyncParsableCommand {
                 command: command))
     }
 
-    /// The named lane, or the one the working directory is in. Being outside a lane is an
-    /// error naming the lanes there are, rather than a guess: attaching to the wrong
-    /// sandbox is worse than being told to name one.
+    /// The named lane, or the one the working directory is in.
     private func resolveLane(repository: Repository) throws -> String {
         if let name { return name }
-
-        let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        if let lane = repository.lane(containing: cwd) { return lane.name }
-
-        let lanes = repository.lanes().map(\.name).sorted()
-        let known =
-            lanes.isEmpty
-            ? "\(repository.name) has no lanes."
-            : "Lanes here: \(lanes.joined(separator: ", "))."
-        throw ArenaError.laneFailed(
-            "\(cwd.path) is not inside a lane, so there is no sandbox to attach to. \(known)")
+        return try repository.currentLane().name
     }
 }
