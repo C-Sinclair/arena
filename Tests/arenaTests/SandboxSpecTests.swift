@@ -154,6 +154,7 @@ struct ImageListingTests {
     func decodesReference() throws {
         let images = try JSONDecoder().decode(
             [ContainerRuntime.Image].self, from: Data(Self.listing.utf8))
-        #expect(images.map(\.reference) == ["arena-demo:abc123", "docker.io/library/alpine:latest"])
+        #expect(
+            images.map(\.reference) == ["arena-demo:abc123", "docker.io/library/alpine:latest"])
     }
 }

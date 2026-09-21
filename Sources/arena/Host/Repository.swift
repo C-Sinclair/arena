@@ -50,6 +50,26 @@ struct Repository {
         return lanes
     }
 
+    /// The lane a directory sits in, which is how `arena @` works out what to attach to.
+    ///
+    /// Matched on the longest path rather than the first, so a lane nested inside another
+    /// lane's tree resolves to the inner one. Compared with a trailing separator, so
+    /// `.../trees/probe-2` is not read as being inside `.../trees/probe`.
+    func lane(containing directory: URL) -> Lane? {
+        Self.lane(in: lanes(), containing: directory)
+    }
+
+    static func lane(in lanes: [Lane], containing directory: URL) -> Lane? {
+        let target = directory.standardizedFileURL.path
+        return
+            lanes
+            .filter { lane in
+                let path = URL(fileURLWithPath: lane.path).standardizedFileURL.path
+                return target == path || target.hasPrefix(path + "/")
+            }
+            .max { $0.path.count < $1.path.count }
+    }
+
     func lanePath(_ name: String) -> URL? {
         guard let lane = lanes().first(where: { $0.name == name }),
             FileManager.default.fileExists(atPath: lane.path)

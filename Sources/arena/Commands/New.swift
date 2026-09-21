@@ -56,7 +56,7 @@ struct New: AsyncParsableCommand {
     /// lane name and silently cuts a lane. `arena list` did that before `list` existed as a
     /// name, building an image to run a lane called "list".
     static let reservedNames: Set<String> = [
-        "new", "list", "ls", "remove", "rm", "build", "help",
+        "new", "list", "ls", "remove", "rm", "build", "help", "enter", "attach", "@",
     ]
 
     func run() async throws {
