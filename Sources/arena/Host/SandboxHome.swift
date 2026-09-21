@@ -121,11 +121,16 @@ struct SandboxHome {
         try seedPermissionMode()
     }
 
+    static let defaultModel = "opus"
+    static let defaultModelID = "claude-opus-5"
+    static let defaultEffort = "low"
+
+    /// Three settings, and the agent asks on every launch without all three.
+    ///
     /// `bypassPermissionsModeAccepted` above records that the warning was read. It does not
-    /// choose the mode, so the agent still started in its default one and asked on every
-    /// launch. `permissions.defaultMode` in `.claude/settings.json` is the setting that
-    /// starts it in bypass, and both are needed: the mode without the acceptance reopens the
-    /// warning.
+    /// choose the mode. `permissions.defaultMode` chooses it. `skipAutoPermissionPrompt`
+    /// suppresses the offer of auto mode, which is a second dialog, asked even of an agent
+    /// already started in bypass: "Make auto mode your default permission mode?"
     private func seedPermissionMode() throws {
         let file = root.appendingPathComponent(".claude/settings.json")
         var settings: [String: Any] =
@@ -135,6 +140,20 @@ struct SandboxHome {
         var permissions = settings["permissions"] as? [String: Any] ?? [:]
         permissions["defaultMode"] = "bypassPermissions"
         settings["permissions"] = permissions
+        settings["skipAutoPermissionPrompt"] = true
+        // Written rather than left to whatever the agent last answered, so a sandbox home
+        // deleted and remade does not ask again.
+        settings["skipDangerousModePermissionPrompt"] = true
+
+        // The model a lane starts on. Not read from the host's settings.json, which is not
+        // mounted: it names MCP servers and hooks that run host binaries.
+        settings["model"] = Self.defaultModel
+        settings["effortLevel"] = Self.defaultEffort
+        var perModel = settings["modelSettings"] as? [String: Any] ?? [:]
+        // The effort a model runs at is keyed by model id, and the top-level effortLevel
+        // does not reach a model that has its own entry.
+        perModel[Self.defaultModelID] = ["effortLevel": Self.defaultEffort]
+        settings["modelSettings"] = perModel
 
         let data = try JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted])
         try data.write(to: file)
