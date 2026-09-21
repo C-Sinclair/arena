@@ -91,6 +91,7 @@ struct New: AsyncParsableCommand {
         let home = try SandboxHome(repository: repository)
         try home.seedAgentSettings(trusting: worktree)
         try home.linkGlobalAgentConfig()
+        try home.writeShellProfile()
         try home.writeGitIdentity()
 
         do {
@@ -106,12 +107,21 @@ struct New: AsyncParsableCommand {
             warn("'gh auth token' returned nothing; fetch and push will fail")
         }
 
+        let tools = try ToolCache()
+        do {
+            try tools.link(.memex)
+        } catch {
+            // A tool the sandbox does without. Failing the launch over a download would make
+            // arena useless on a train.
+            warn("\(error)")
+        }
+
         let spec = SandboxSpec(
             name: sandbox,
             image: resolvedImage,
             workdir: worktree,
             resources: resourceOptions.resources,
-            mounts: try mounts(repository: repository, home: home) + extraMounts(),
+            mounts: try mounts(repository: repository, home: home, tools: tools) + extraMounts(),
             environment: Self.gitOverrides
                 .merging(Self.terminalOverrides) { _, new in new }
                 .merging(try extraEnvironment()) { _, new in new },
@@ -180,10 +190,13 @@ struct New: AsyncParsableCommand {
         }
     }
 
-    private func mounts(repository: Repository, home: SandboxHome) -> [Mount] {
+    private func mounts(repository: Repository, home: SandboxHome, tools: ToolCache) -> [Mount] {
         var mounts = [
             Mount(repository.root),
             Mount(home.root, at: "/home/agent"),
+            // Linux builds of the host's own tools, on the sandbox PATH through
+            // Self.command. Read-only: the host owns what goes in here.
+            Mount(tools.root, at: ToolCache.guestRoot, readOnly: true),
             // State that has to outlive the container, which is every run: arena always
             // runs with --rm, so the container's own root filesystem goes with it.
             Mount(home.state, at: "/var/lib/arena"),
@@ -198,6 +211,17 @@ struct New: AsyncParsableCommand {
             .appendingPathComponent(".claude/projects")
         try? FileManager.default.createDirectory(at: transcripts, withIntermediateDirectories: true)
         mounts.append(Mount(transcripts, at: "/home/agent/.claude/projects"))
+
+        // memex searches the same index the host built, rather than building a second one
+        // from the transcripts above. Not read-only: a search opens Tantivy's lock files for
+        // write and fails with "Read-only file system (os error 30)" without it, though it
+        // changes nothing in the index itself. Running `memex index` in a lane while the
+        // host indexes is the case this cannot protect against.
+        let memexIndex = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".memex")
+        if FileManager.default.fileExists(atPath: memexIndex.path) {
+            mounts.append(Mount(memexIndex, at: "/home/agent/.memex"))
+        }
 
         // The global agent configuration is reached through symlinks in ~/.claude pointing
         // into the dotfiles repository. Mounting what they resolve to, read-only, is what
@@ -254,8 +278,11 @@ struct New: AsyncParsableCommand {
     /// agent occupies a pane from that name before applying its screen-detection rules;
     /// left as the runtime's name, the agent matches nothing and never appears in the
     /// agents tab.
+    /// PATH is set in the command rather than passed as `--env`, because the agent runs
+    /// under `bash -lc` and a login shell's `/etc/profile` overwrites an inherited PATH.
     static func command(agent: String) -> String {
-        "command -v arena-init >/dev/null && arena-init; "
+        "export PATH=\(ToolCache.guestBin):$PATH; "
+            + "command -v arena-init >/dev/null && arena-init; "
             + "exec -a \(agent) \(agent) --dangerously-skip-permissions"
     }
 

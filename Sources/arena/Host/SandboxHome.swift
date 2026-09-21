@@ -64,6 +64,31 @@ struct SandboxHome {
         }
     }
 
+    /// Puts the mounted Linux tools on the PATH of every shell in the sandbox.
+    ///
+    /// Not an `--env PATH`: the agent runs under `bash -lc`, and Ubuntu's `/etc/profile`
+    /// assigns PATH outright rather than appending, so an inherited one is discarded before
+    /// the agent starts. A file the login shell reads afterwards is the only place the
+    /// prepend survives.
+    ///
+    /// Written to `.arena-profile` and sourced from `.profile` and `.bashrc`, so a line the
+    /// user adds to either is never overwritten.
+    func writeShellProfile() throws {
+        let profile = root.appendingPathComponent(".arena-profile")
+        try write("export PATH=\"\(ToolCache.guestBin):$PATH\"\n", to: profile)
+        try fileManager.setAttributes([.posixPermissions: 0o644], ofItemAtPath: profile.path)
+
+        let source = ". \"$HOME/.arena-profile\""
+        for name in [".profile", ".bashrc"] {
+            let file = root.appendingPathComponent(name)
+            let existing = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
+            guard !existing.contains(source) else { continue }
+            let separator = existing.isEmpty || existing.hasSuffix("\n") ? "" : "\n"
+            try (existing + separator + source + "\n").write(
+                to: file, atomically: true, encoding: .utf8)
+        }
+    }
+
     private var settingsFile: URL { root.appendingPathComponent(".claude.json") }
 
     /// Seeded once. `hasCompletedOnboarding` is what silences the theme picker. The host's
