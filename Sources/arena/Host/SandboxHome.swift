@@ -92,14 +92,59 @@ struct SandboxHome {
 
         let data = try JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted])
         try data.write(to: settingsFile)
+
+        try seedPermissionMode()
     }
 
-    /// Rewritten every run so a refreshed host token propagates, and never mounted from the
-    /// host copy: a token the sandbox rotated would otherwise invalidate the host's.
-    func writeAgentCredentials() throws {
+    /// `bypassPermissionsModeAccepted` above records that the warning was read. It does not
+    /// choose the mode, so the agent still started in its default one and asked on every
+    /// launch. `permissions.defaultMode` in `.claude/settings.json` is the setting that
+    /// starts it in bypass, and both are needed: the mode without the acceptance reopens the
+    /// warning.
+    private func seedPermissionMode() throws {
+        let file = root.appendingPathComponent(".claude/settings.json")
+        var settings: [String: Any] =
+            (try? Data(contentsOf: file))
+            .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
+
+        var permissions = settings["permissions"] as? [String: Any] ?? [:]
+        permissions["defaultMode"] = "bypassPermissions"
+        settings["permissions"] = permissions
+
+        let data = try JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted])
+        try data.write(to: file)
+    }
+
+    private var agentCredentialsFile: URL {
+        root.appendingPathComponent(".claude/.credentials.json")
+    }
+
+    /// Written from the Keychain, and never mounted from the host copy: a token the sandbox
+    /// rotated would otherwise invalidate the host's.
+    ///
+    /// Reading the Keychain is what makes macOS ask for the login password. arena is not in
+    /// the item's access control list, and an unsigned arena gets a fresh ad-hoc signature
+    /// from every `swift build`, so "Always Allow" has no stable identity to remember.
+    /// Skipping the read while the token arena last wrote is still valid turns that prompt
+    /// from every launch into once a token lifetime. Sign the binary to be rid of it
+    /// entirely.
+    func writeAgentCredentials(force: Bool = false) throws {
+        let cached = Self.expiry(of: agentCredentialsFile)
+        if !force, let cached, cached > Date().addingTimeInterval(300) { return }
+
         let secret = try Credentials.keychainSecret(service: Credentials.claudeService)
-        let file = root.appendingPathComponent(".claude/.credentials.json")
-        try write(secret, to: file)
+        try write(secret, to: agentCredentialsFile)
+    }
+
+    /// `claudeAiOauth.expiresAt`, in milliseconds since the epoch. Nil for a file that is
+    /// absent, unreadable or shaped differently, which sends the caller to the Keychain.
+    private static func expiry(of file: URL) -> Date? {
+        guard let data = try? Data(contentsOf: file),
+            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let oauth = json["claudeAiOauth"] as? [String: Any],
+            let milliseconds = oauth["expiresAt"] as? Double
+        else { return nil }
+        return Date(timeIntervalSince1970: milliseconds / 1000)
     }
 
     /// A file rather than `GH_TOKEN` in the environment. The Herdr path passes its command

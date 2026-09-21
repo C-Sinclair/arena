@@ -45,6 +45,11 @@ struct New: AsyncParsableCommand {
     @Option(name: .long, help: "Agent binary to launch inside the sandbox.")
     var agent = "claude"
 
+    @Flag(
+        name: .long,
+        help: "Read the agent token from the Keychain even when the cached one is still valid.")
+    var refreshToken = false
+
     @OptionGroup var resourceOptions: ResourceOptions
 
     /// `new` is the default subcommand, so a subcommand arena does not have is parsed as a
@@ -89,7 +94,7 @@ struct New: AsyncParsableCommand {
         try home.writeGitIdentity()
 
         do {
-            try home.writeAgentCredentials()
+            try home.writeAgentCredentials(force: refreshToken)
         } catch {
             warn("\(error)")
             warn("run /login inside the sandbox; it persists in \(home.root.path)")
