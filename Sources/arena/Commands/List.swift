@@ -15,8 +15,10 @@ struct List: AsyncParsableCommand {
         // A sandbox built from a repository's own Dockerfile is named for arena. One running
         // a base image is not distinguishable from any other container, so it is listed only
         // when arena cut a lane of that name.
-        let lanes = Set(
+        // `arena .` cuts no lane, so the worktree the shell is in is added by hand.
+        var lanes = Set(
             (try? Repository.discover().lanes().map { $0.name.asContainerID() }) ?? [])
+        if let toplevel = try? Repository.toplevel() { lanes.insert(Here.sandboxID(toplevel)) }
 
         let instances = try ContainerRuntime.instances(all: all)
             .filter { $0.image.hasPrefix("arena-") || lanes.contains($0.id) }

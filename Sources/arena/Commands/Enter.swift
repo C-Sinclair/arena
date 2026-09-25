@@ -16,7 +16,8 @@ struct Enter: AsyncParsableCommand {
         aliases: ["attach"]
     )
 
-    @Argument(help: "Lane name. Defaults to the lane the working directory is in.")
+    @Argument(
+        help: "Lane name, or `.` for the worktree the shell is in. Defaults to the lane it is in.")
     var name: String?
 
     @Flag(name: [.customShort("a"), .long], help: "Start another agent rather than a shell.")
@@ -30,7 +31,8 @@ struct Enter: AsyncParsableCommand {
     func run() async throws {
         let repository = try Repository.discover()
         let lane = try resolveLane(repository: repository)
-        let sandbox = lane.asContainerID()
+        let toplevel = lane == "." ? try Repository.toplevel() : nil
+        let sandbox = toplevel.map(Here.sandboxID) ?? lane.asContainerID()
 
         guard let instance = try ContainerRuntime.instances().first(where: { $0.id == sandbox })
         else {
@@ -49,7 +51,7 @@ struct Enter: AsyncParsableCommand {
             ContainerRuntime.binary,
             ContainerRuntime.execArguments(
                 id: sandbox,
-                workdir: repository.lanePath(lane),
+                workdir: toplevel ?? repository.lanePath(lane),
                 environment: New.terminalOverrides,
                 command: command))
     }

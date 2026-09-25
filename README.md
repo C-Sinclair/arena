@@ -30,6 +30,9 @@ arena new e2e                      # branch, worktree, image, sandbox, agent
 arena new e2e --herdr              # the same, in a new Herdr workspace
 arena new hotfix --base v1.2.0     # branch from a rev other than the default
 arena new spike --dirty            # carry uncommitted work into the lane
+arena @                            # launch or join the lane the shell is in
+arena .                            # launch against this worktree, no lane cut
+arena enter .                      # a shell in the sandbox `arena .` started
 arena ls                           # what is running
 arena build                        # rebuild this repository's image
 arena rm e2e --force               # stop it, delete the worktree and the branch
@@ -39,6 +42,8 @@ arena rm e2e --keep-branch         # stop it, keep the branch
 `--base` and `--dirty` are [`lane`](https://github.com/C-Sinclair/lane)'s own flags, passed
 through. There is no separate branch flag because lane has none: the lane name is the branch
 name.
+
+`arena .` is for repositories that are never laned, such as dotfiles. The worktree is `git rev-parse --show-toplevel` and the container id is its directory name. It takes every `new` option except `--base` and `--dirty`. It has not been run end to end.
 
 Extra host directories and environment variables go in per run, each mounted at the path it
 already has so it is reachable inside the sandbox exactly where it lives outside:
@@ -153,7 +158,7 @@ where the agents work.
 ## Develop
 
 ```sh
-swift test                                          # 31 tests
+swift test                                          # 41 tests
 swift format lint --recursive --strict Sources Tests
 ./scripts/check-links.sh                            # every relative markdown link resolves
 ```

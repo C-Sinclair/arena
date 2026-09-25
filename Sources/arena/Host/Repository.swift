@@ -17,6 +17,16 @@ struct Repository {
 
     var name: String { root.lastPathComponent }
 
+    /// The worktree a directory sits in, lane or not. `arena .` works against this, so it
+    /// never asks `lane` anything.
+    static func toplevel(
+        from directory: URL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    ) throws -> URL {
+        URL(
+            fileURLWithPath: try Shell.run(
+                "git", ["rev-parse", "--show-toplevel"], workingDirectory: directory))
+    }
+
     func config(_ key: String) -> String? {
         guard let value = try? Shell.run("git", ["-C", root.path, "config", "--get", key]),
             !value.isEmpty
@@ -72,7 +82,9 @@ struct Repository {
             names.isEmpty
             ? "\(name) has no lanes."
             : "Lanes here: \(names.joined(separator: ", "))."
-        throw ArenaError.laneFailed("\(cwd.path) is not inside a lane. \(known)")
+        throw ArenaError.laneFailed(
+            "\(cwd.path) is not inside a lane. \(known) "
+                + "`arena .` launches a sandbox against this worktree without one.")
     }
 
     static func lane(in lanes: [Lane], containing directory: URL) -> Lane? {

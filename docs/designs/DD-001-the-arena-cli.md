@@ -107,7 +107,11 @@ None of these have been taken.
 1. **Package skeleton, `Shell`, `ContainerRuntime`, `SandboxSpec`.** Checkable by `swift test`
    and by `arena ls` returning the live runtime's state. *Done.*
 2. **`new`, `ls`, `rm`, `build` ported from `sandc`.** Checkable by launching a sandbox in a
-   real repository. *Written, not yet exercised end to end.*
+   real repository. *Written, not yet exercised end to end.* `arena .` belongs here too: it
+   launches against the worktree the shell is in with no lane, for repositories such as
+   dotfiles that are never laned. Its container id is that worktree's directory name, and
+   `arena enter .` joins it. It shares `New.launch` with `new`, so both build one
+   `SandboxSpec`. *Written, not yet exercised end to end.*
 3. **Delete `sand` and `sandc` from the dotfiles repository.** Checkable by that repository no
    longer referencing sbx. *Not started.*
 4. **Install path.** `swift build -c release` and a symlink, or a Homebrew formula. Undecided.
@@ -117,7 +121,9 @@ None of these have been taken.
 
 - **`arena new` has not been run end to end.** Every piece is written and the package builds,
   but no sandbox has been launched by this binary. `ls` is the only command exercised against
-  the live runtime.
+  the live runtime. `arena .` has not been run end to end either.
+- **Two unlaned repositories with the same directory name share a container id.** `arena .`
+  in the second joins the first one's sandbox.
 - **No `arena-init` failure handling.** If a project's database fails to start, the agent
   launches anyway and the failure presents as a confusing test error.
 - **No cleanup command.** Old digest-tagged images and `~/.arena/state/<repo>` directories

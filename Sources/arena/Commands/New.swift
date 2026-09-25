@@ -56,7 +56,7 @@ struct New: AsyncParsableCommand {
     /// lane name and silently cuts a lane. `arena list` did that before `list` existed as a
     /// name, building an image to run a lane called "list".
     static let reservedNames: Set<String> = [
-        "new", "list", "ls", "remove", "rm", "build", "help", "enter", "attach", "@",
+        "new", "list", "ls", "remove", "rm", "build", "help", "enter", "attach", "@", ".",
     ]
 
     func run() async throws {
@@ -84,6 +84,12 @@ struct New: AsyncParsableCommand {
             worktree = try repository.createLane(name, base: base, dirty: dirty)
         }
 
+        try launch(sandbox: sandbox, worktree: worktree, repository: repository)
+    }
+
+    /// Everything after the worktree exists, shared by `new` and `arena .` so both launch
+    /// the same sandbox from one `SandboxSpec`, whether directly or through Herdr.
+    func launch(sandbox: String, worktree: URL, repository: Repository) throws {
         let resolvedImage =
             try image
             ?? ImageResolver(repository: repository, worktree: worktree).resolve(rebuild: rebuild)
@@ -145,7 +151,7 @@ struct New: AsyncParsableCommand {
     /// gives. A stopped one is a leftover: arena runs with --rm, so a container in any other
     /// state is the wreckage of a run that did not tear itself down, and removing it is what
     /// lets this launch proceed.
-    private static func clearSandbox(named sandbox: String, lane: String, workdir: URL?) throws {
+    static func clearSandbox(named sandbox: String, lane: String, workdir: URL?) throws {
         guard let instance = try? ContainerRuntime.instances().first(where: { $0.id == sandbox })
         else { return }
 
