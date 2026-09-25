@@ -113,12 +113,10 @@ struct DiscoveryOutsideGitTests {
 /// `--get-all`. See ADR-009.
 @Suite("Multi-valued config")
 struct ConfigAllTests {
-    /// A key of its own rather than `New.mountKey`. `configAll` reads the user's global
-    /// config as well as the repository's, so a test asserting on `arena.mount` fails on
-    /// the machine of anyone who has set one.
-    private let key = "arena.testMount"
+    private let key = New.mountKey
 
     private func repository() throws -> (Repository, URL) {
+        _ = GitIsolation.enabled
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("arena-config-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

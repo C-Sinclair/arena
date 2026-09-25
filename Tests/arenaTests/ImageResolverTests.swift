@@ -10,6 +10,7 @@ private struct TemporaryRepository: ~Copyable {
     let worktree: URL
 
     init() throws {
+        _ = GitIsolation.enabled
         root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("arena-tests-\(UUID().uuidString)")
         worktree = root.appendingPathComponent(".lane/trees/demo")
@@ -43,7 +44,7 @@ struct ImageResolverTests {
         let temporary = try TemporaryRepository()
         try temporary.write("FROM base", to: ".arena/Dockerfile", under: temporary.root)
 
-        var resolver = ImageResolver(repository: temporary.repository, worktree: temporary.worktree)
+        let resolver = ImageResolver(repository: temporary.repository, worktree: temporary.worktree)
         #expect(try resolver.dockerfile()?.path.hasPrefix(temporary.root.path) == true)
         #expect(try resolver.dockerfile()?.path.contains(".lane") == false)
     }
@@ -57,7 +58,7 @@ struct ImageResolverTests {
         try temporary.write("FROM base", to: ".arena/Dockerfile", under: temporary.root)
         try temporary.write("FROM branch", to: ".arena/Dockerfile", under: temporary.worktree)
 
-        var resolver = ImageResolver(repository: temporary.repository, worktree: temporary.worktree)
+        let resolver = ImageResolver(repository: temporary.repository, worktree: temporary.worktree)
         let found = try #require(try resolver.dockerfile())
         #expect(try String(contentsOf: found, encoding: .utf8) == "FROM branch")
     }
@@ -70,7 +71,7 @@ struct ImageResolverTests {
             "git",
             ["-C", temporary.root.path, "config", "arena.dockerfile", "ci/sandbox.Dockerfile"])
 
-        var resolver = ImageResolver(repository: temporary.repository, worktree: temporary.worktree)
+        let resolver = ImageResolver(repository: temporary.repository, worktree: temporary.worktree)
         let found = try #require(try resolver.dockerfile())
         #expect(found.lastPathComponent == "sandbox.Dockerfile")
     }
@@ -78,7 +79,7 @@ struct ImageResolverTests {
     @Test("git config arena.baseImage overrides the default base")
     func configuredBaseImage() throws {
         let temporary = try TemporaryRepository()
-        var resolver = ImageResolver(repository: temporary.repository, worktree: temporary.worktree)
+        let resolver = ImageResolver(repository: temporary.repository, worktree: temporary.worktree)
         #expect(resolver.baseImage == ImageResolver.defaultBaseImage)
 
         try Shell.run("git", ["-C", temporary.root.path, "config", "arena.baseImage", "mine:v2"])

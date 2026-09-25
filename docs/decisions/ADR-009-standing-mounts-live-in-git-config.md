@@ -61,9 +61,10 @@ A guest path named twice is mounted once, on the reading that `container run` re
 ## Evidence
 
 - `Tests/arenaTests/MountTests.swift`, suite `Extra mounts and the sandbox's own`: `added`, `collidesWithBase`, `repeated`, `lastWins`, `baseOrder`.
-- `Tests/arenaTests/RepositoryTests.swift`, suite `Multi-valued config`: `allValues`, `unset`. The tests use `arena.testMount` rather than `arena.mount`, because `configAll` reads the user's global config too.
+- `Tests/arenaTests/RepositoryTests.swift`, suite `Multi-valued config`: `allValues`, `unset`. Both suites passed on 2026-09-25, swift-testing 1501 on arm64e-apple-macos14.0. That run asserted on `arena.testMount`; the key was changed to `arena.mount` when `GitIsolation` landed, and that version has not been re-run.
+- `configAll` reading the user's global config is not hypothetical. On that run `Dockerfile resolution/configuredBaseImage` failed, `elixir-agent:latest` against an expected `agent-base:latest`, because the author's global `arena.baseImage` reached a throwaway repository that set none. `Tests/arenaTests/GitIsolation.swift` now points `GIT_CONFIG_GLOBAL` and `GIT_CONFIG_SYSTEM` at `/dev/null` for the whole test process, which is what lets `Multi-valued config` assert on the real `arena.mount` key.
 - The problem, observed from inside a running sandbox on 2026-09-25: `ls /Users/conor` prints `Repos` and nothing else, and `ls /Users/conor/Library` fails with `No such file or directory`.
-- **Not verified:** whether Apple container will bind-mount `~/Library/CloudStorage/Dropbox`, which is a File Provider path rather than a plain directory, and whether a dataless file materializes when the guest reads it. If it does not, the workaround is to point the screenshot tool at a plain directory such as `~/Screenshots` and configure that. No sandbox has been launched with `arena.mount` set. The Swift toolchain was not available where this change was written, so `swift build` and `swift test` have not been run against it.
+- **Not verified:** whether Apple container will bind-mount `~/Library/CloudStorage/Dropbox`, which is a File Provider path rather than a plain directory, and whether a dataless file materializes when the guest reads it. If it does not, the workaround is to point the screenshot tool at a plain directory such as `~/Screenshots` and configure that. No sandbox has been launched with `arena.mount` set, so nothing here is checked past the unit tests.
 
 ## Notes
 

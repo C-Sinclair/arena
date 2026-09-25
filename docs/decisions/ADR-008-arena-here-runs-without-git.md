@@ -57,7 +57,8 @@ This is a judgement about which commands are meaningful, not a measurement. Noth
 - `Tests/arenaTests/RepositoryTests.swift`, suite `Discovery outside git`: `rootIsTheDirectory`, `hereWorktreeOutsideGit`, `noLanes`, `requireGitThrows`, `requireGitPasses`.
 - The pre-change failure, run in an empty directory under `/tmp` with git 2.55.0: `git rev-parse --path-format=absolute --git-common-dir` exits 128 with `fatal: not a git repository (or any of the parent directories): .git`.
 - `Repository.config` deliberately keeps working outside a repository: `git -C <dir> config --get` answers from the user's global file, which is what gives a non-git directory a global `arena.baseImage`.
-- **Not verified:** no sandbox has been launched from a non-git directory. The Swift toolchain was not available where this change was written, so `swift build` and `swift test` have not been run against it either. `arena new` has still never been run end to end.
+- The suite compiles and those five tests pass, run on 2026-09-25 with swift-testing 1501 on arm64e-apple-macos14.0.
+- **Not verified:** no sandbox has been launched from a non-git directory, and `arena new` has still never been run end to end.
 
 ## Notes
 
