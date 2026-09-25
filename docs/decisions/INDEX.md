@@ -26,6 +26,7 @@ in [`../designs/INDEX.md`](../designs/INDEX.md) and reference these.
 | [004](ADR-004-repositories-declare-their-own-image.md) | A repository declares its own image in `.arena/Dockerfile` | accepted |
 | [005](ADR-005-size-sandboxes-for-a-browser-suite.md) | Size sandboxes for a browser suite by default | accepted |
 | [006](ADR-006-project-services-run-inside-the-sandbox.md) | Project services run inside the sandbox, on a host-backed state mount | accepted |
+| [008](ADR-008-arena-here-runs-without-git.md) | `arena .` runs without git, and no other command does | accepted |
 
 ## Documentation
 

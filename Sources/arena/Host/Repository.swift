@@ -1,21 +1,44 @@
 import Foundation
 
-/// The git repository arena was invoked inside, and the lanes cut from it.
+/// The directory arena was invoked inside, the lanes cut from it, and whether git tracks it
+/// at all.
 struct Repository {
     let root: URL
 
+    /// False for a directory git does not track. Only `arena .` and `arena build` run
+    /// against one: a lane is a git worktree, so every command naming a lane needs this to
+    /// be true. See ADR-008.
+    let isGitRepository: Bool
+
     /// `--git-common-dir` resolves to the parent repository's `.git` even when the working
     /// directory is already a worktree, which `--show-toplevel` does not.
+    ///
+    /// A directory outside git is not an error here, because `arena .` works against one.
+    /// The commands that need git call `requireGit` rather than relying on this to throw.
     static func discover(
         from directory: URL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-    ) throws -> Repository {
-        let common = try Shell.run(
-            "git", ["rev-parse", "--path-format=absolute", "--git-common-dir"],
-            workingDirectory: directory)
-        return Repository(root: URL(fileURLWithPath: common).deletingLastPathComponent())
+    ) -> Repository {
+        guard
+            let common = try? Shell.run(
+                "git", ["rev-parse", "--path-format=absolute", "--git-common-dir"],
+                workingDirectory: directory)
+        else {
+            return Repository(root: directory.standardizedFileURL, isGitRepository: false)
+        }
+        return Repository(
+            root: URL(fileURLWithPath: common).deletingLastPathComponent(),
+            isGitRepository: true)
     }
 
     var name: String { root.lastPathComponent }
+
+    /// Called by every command but `arena .` and `arena build`, so a lane operation in a
+    /// directory git does not track fails naming the one command that does work there,
+    /// rather than reaching `lane` and failing with lane's own error.
+    func requireGit() throws {
+        guard !isGitRepository else { return }
+        throw ArenaError.notARepository(root.path)
+    }
 
     /// The worktree a directory sits in, lane or not. `arena .` works against this, so it
     /// never asks `lane` anything.
@@ -27,6 +50,16 @@ struct Repository {
                 "git", ["rev-parse", "--show-toplevel"], workingDirectory: directory))
     }
 
+    /// What `arena .` launches against: the worktree the shell is in, or the directory
+    /// itself when git does not track it.
+    static func hereWorktree(
+        from directory: URL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    ) -> URL {
+        (try? toplevel(from: directory)) ?? directory.standardizedFileURL
+    }
+
+    /// `-C` into a directory git does not track still answers from the user's global file,
+    /// which is what gives a non-git directory a global `arena.baseImage`.
     func config(_ key: String) -> String? {
         guard let value = try? Shell.run("git", ["-C", root.path, "config", "--get", key]),
             !value.isEmpty
@@ -126,14 +159,16 @@ struct Repository {
 }
 
 enum ArenaError: Error, CustomStringConvertible {
-    case notARepository
+    case notARepository(String)
     case laneFailed(String)
     case buildFailed(String)
     case missingCredentials(String)
 
     var description: String {
         switch self {
-        case .notARepository: "not inside a git repository"
+        case .notARepository(let path):
+            "\(path) is not a git repository, and a lane is a git worktree. "
+                + "`arena .` launches a sandbox against this directory without one."
         case .laneFailed(let detail): detail
         case .buildFailed(let detail): detail
         case .missingCredentials(let detail): detail

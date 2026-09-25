@@ -48,3 +48,63 @@ struct LaneContainingTests {
         #expect(lane("/repo/.lane/trees/probe/lib/../lib") == "probe")
     }
 }
+
+/// `discover` answers for a directory git does not track, because `arena .` runs against
+/// one. See ADR-008.
+@Suite("Discovery outside git")
+struct DiscoveryOutsideGitTests {
+    private func temporaryDirectory() throws -> URL {
+        let url = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("arena-nongit-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+
+    @Test("a directory git does not track discovers as itself")
+    func rootIsTheDirectory() throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let repository = Repository.discover(from: directory)
+        #expect(repository.isGitRepository == false)
+        #expect(repository.root.path == directory.standardizedFileURL.path)
+    }
+
+    @Test("hereWorktree outside git is the directory itself")
+    func hereWorktreeOutsideGit() throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        #expect(
+            Repository.hereWorktree(from: directory).path
+                == directory.standardizedFileURL.path)
+    }
+
+    @Test("lanes outside git is empty rather than an error")
+    func noLanes() throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        #expect(Repository.discover(from: directory).lanes().isEmpty)
+    }
+
+    @Test("requireGit names the directory and points at `arena .`")
+    func requireGitThrows() throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let repository = Repository.discover(from: directory)
+        #expect(throws: ArenaError.self) { try repository.requireGit() }
+    }
+
+    @Test("requireGit passes inside a git repository")
+    func requireGitPasses() throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try Shell.run("git", ["-C", directory.path, "init", "--quiet"])
+
+        let repository = Repository.discover(from: directory)
+        #expect(repository.isGitRepository)
+        #expect(throws: Never.self) { try repository.requireGit() }
+    }
+}

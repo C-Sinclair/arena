@@ -43,7 +43,9 @@ arena rm e2e --keep-branch         # stop it, keep the branch
 through. There is no separate branch flag because lane has none: the lane name is the branch
 name.
 
-`arena .` is for repositories that are never laned, such as dotfiles. The worktree is `git rev-parse --show-toplevel` and the container id is its directory name. It takes every `new` option except `--base` and `--dirty`. It has not been run end to end.
+`arena .` is for repositories that are never laned, such as dotfiles, and for directories git does not track at all. The worktree is `git rev-parse --show-toplevel`, or the directory itself when that fails, and the container id is its directory name. It takes every `new` option except `--base` and `--dirty`. It has not been run end to end.
+
+`arena .` and `arena build` are the only commands that run outside a git repository ([ADR-008](docs/decisions/ADR-008-arena-here-runs-without-git.md)). Every other command names a lane, a lane is a git worktree, and they refuse with a message pointing at `arena .`.
 
 Extra host directories and environment variables go in per run, each mounted at the path it
 already has so it is reachable inside the sandbox exactly where it lives outside:

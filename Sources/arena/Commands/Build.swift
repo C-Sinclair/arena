@@ -13,7 +13,10 @@ struct Build: AsyncParsableCommand {
     @OptionGroup var imageOptions: DockerfileOptions
 
     func run() async throws {
-        let repository = try Repository.discover()
+        let repository = Repository.discover()
+        // The build itself needs no git, so a non-git directory builds its own
+        // .arena/Dockerfile. `--lane` names a worktree, which does need git.
+        if lane != nil { try repository.requireGit() }
         let worktree = lane.flatMap { repository.lanePath($0) } ?? repository.root
 
         var resolver = ImageResolver(repository: repository, worktree: worktree)

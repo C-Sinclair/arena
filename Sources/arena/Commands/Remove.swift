@@ -18,7 +18,8 @@ struct Remove: AsyncParsableCommand {
     var keepBranch = false
 
     func run() async throws {
-        let repository = try Repository.discover()
+        let repository = Repository.discover()
+        try repository.requireGit()
         let sandbox = name.asContainerID()
 
         // Herdr first: closing the workspace kills the panes still holding the sandbox and

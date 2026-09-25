@@ -71,7 +71,8 @@ struct New: AsyncParsableCommand {
                     + "`arena new <name>` to cut a lane.")
         }
 
-        let repository = try Repository.discover()
+        let repository = Repository.discover()
+        try repository.requireGit()
         let sandbox = name.asContainerID()
         if sandbox != name.replacingOccurrences(of: "/", with: "-") {
             print("arena: name too long for a container id; using \(sandbox)")

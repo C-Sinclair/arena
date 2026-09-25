@@ -17,7 +17,7 @@ private struct TemporaryRepository: ~Copyable {
         try Shell.run("git", ["-C", root.path, "init", "--quiet"])
     }
 
-    var repository: Repository { Repository(root: root) }
+    var repository: Repository { Repository(root: root, isGitRepository: true) }
 
     func write(_ contents: String, to relative: String, under base: URL) throws {
         let file = base.appendingPathComponent(relative)

@@ -21,7 +21,9 @@ struct Current: AsyncParsableCommand {
     var passthrough: [String] = []
 
     func run() async throws {
-        let lane = try Repository.discover().currentLane()
+        let repository = Repository.discover()
+        try repository.requireGit()
+        let lane = try repository.currentLane()
         var command = try New.parse([lane.name] + passthrough)
         try await command.run()
     }

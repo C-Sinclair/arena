@@ -29,9 +29,9 @@ struct Enter: AsyncParsableCommand {
     static let shellCommand = "exec bash -l"
 
     func run() async throws {
-        let repository = try Repository.discover()
+        let repository = Repository.discover()
         let lane = try resolveLane(repository: repository)
-        let toplevel = lane == "." ? try Repository.toplevel() : nil
+        let toplevel = lane == "." ? Repository.hereWorktree() : nil
         let sandbox = toplevel.map(Here.sandboxID) ?? lane.asContainerID()
 
         guard let instance = try ContainerRuntime.instances().first(where: { $0.id == sandbox })
@@ -59,6 +59,7 @@ struct Enter: AsyncParsableCommand {
     /// The named lane, or the one the working directory is in.
     private func resolveLane(repository: Repository) throws -> String {
         if let name { return name }
+        try repository.requireGit()
         return try repository.currentLane().name
     }
 }
