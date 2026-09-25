@@ -76,6 +76,8 @@ That is where a project brings up a service its tests need. State that must outl
 container goes in `/var/lib/arena`, which arena mounts from `~/.arena/state/<repo>`
 ([ADR-006](docs/decisions/ADR-006-project-services-run-inside-the-sandbox.md)).
 
+If the image provides `claude-refresh`, arena runs it before `arena-init`. It reinstalls Claude Code into `~/.local/bin` on the persistent sandbox home when the last install is over 8h old, and arena puts `~/.local/bin` first on the agent's PATH so that install wins over the image's. `-U` / `--update-claude` sets `ARENA_CLAUDE_REFRESH=1` to force the reinstall on this launch. Neither has been run end to end.
+
 The path is overridable three ways, most specific first:
 
 ```sh

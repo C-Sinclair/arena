@@ -50,6 +50,11 @@ struct New: AsyncParsableCommand {
         help: "Read the agent token from the Keychain even when the cached one is still valid.")
     var refreshToken = false
 
+    @Flag(
+        name: [.customShort("U"), .long],
+        help: "Reinstall the agent into the sandbox home before launch, however recent the last install.")
+    var updateClaude = false
+
     @OptionGroup var resourceOptions: ResourceOptions
 
     /// `new` is the default subcommand, so a subcommand arena does not have is parsed as a
@@ -134,6 +139,7 @@ struct New: AsyncParsableCommand {
             mounts: try mounts(repository: repository, home: home, tools: tools) + extraMounts(),
             environment: Self.gitOverrides
                 .merging(Self.terminalOverrides) { _, new in new }
+                .merging(Self.refreshOverrides(force: updateClaude)) { _, new in new }
                 .merging(try extraEnvironment()) { _, new in new },
             command: Self.command(agent: agent)
         )
@@ -321,14 +327,24 @@ struct New: AsyncParsableCommand {
         "COLORTERM": "truecolor",
     ]
 
+    /// Read by the image's `claude-refresh`, which otherwise reinstalls only when the last
+    /// install is over 8h old.
+    static func refreshOverrides(force: Bool) -> [String: String] {
+        force ? ["ARENA_CLAUDE_REFRESH": "1"] : [:]
+    }
+
     /// `exec -a` names the pane's foreground process for the agent. Herdr identifies which
     /// agent occupies a pane from that name before applying its screen-detection rules;
     /// left as the runtime's name, the agent matches nothing and never appears in the
     /// agents tab.
     /// PATH is set in the command rather than passed as `--env`, because the agent runs
     /// under `bash -lc` and a login shell's `/etc/profile` overwrites an inherited PATH.
+    /// `$HOME/.local/bin` comes first so the agent `claude-refresh` installed into the
+    /// persistent home wins over the one baked into the image. The `command -v` guards keep
+    /// images without either script launching.
     static func command(agent: String) -> String {
-        "export PATH=\(ToolCache.guestBin):$PATH; "
+        "export PATH=$HOME/.local/bin:\(ToolCache.guestBin):$PATH; "
+            + "command -v claude-refresh >/dev/null && claude-refresh; "
             + "command -v arena-init >/dev/null && arena-init; "
             + "exec -a \(agent) \(agent) --dangerously-skip-permissions"
     }
