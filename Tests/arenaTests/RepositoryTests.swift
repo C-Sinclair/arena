@@ -108,3 +108,40 @@ struct DiscoveryOutsideGitTests {
         #expect(throws: Never.self) { try repository.requireGit() }
     }
 }
+
+/// `arena.mount` takes as many values as the user adds, so the reader has to be
+/// `--get-all`. See ADR-009.
+@Suite("Multi-valued config")
+struct ConfigAllTests {
+    /// A key of its own rather than `New.mountKey`. `configAll` reads the user's global
+    /// config as well as the repository's, so a test asserting on `arena.mount` fails on
+    /// the machine of anyone who has set one.
+    private let key = "arena.testMount"
+
+    private func repository() throws -> (Repository, URL) {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("arena-config-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try Shell.run("git", ["-C", root.path, "init", "--quiet"])
+        return (Repository(root: root, isGitRepository: true), root)
+    }
+
+    @Test("every value of a repeated key is returned, in git's order")
+    func allValues() throws {
+        let (repository, root) = try self.repository()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try Shell.run("git", ["-C", root.path, "config", "--add", key, "/a:ro"])
+        try Shell.run("git", ["-C", root.path, "config", "--add", key, "/b"])
+
+        #expect(repository.configAll(key) == ["/a:ro", "/b"])
+    }
+
+    @Test("a key that is not set returns nothing")
+    func unset() throws {
+        let (repository, root) = try self.repository()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        #expect(repository.configAll("arena.nothingSetHere").isEmpty)
+    }
+}

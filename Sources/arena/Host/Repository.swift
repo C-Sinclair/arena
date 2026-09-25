@@ -67,6 +67,15 @@ struct Repository {
         return value
     }
 
+    /// Every value of a multi-valued key, nearest scope last, which is the order git itself
+    /// reports. `config(_:)` returns only the last value, so a repository setting
+    /// `arena.mount` would otherwise hide the global ones.
+    func configAll(_ key: String) -> [String] {
+        guard let values = try? Shell.run("git", ["-C", root.path, "config", "--get-all", key])
+        else { return [] }
+        return values.split(separator: "\n").map(String.init).filter { !$0.isEmpty }
+    }
+
     func branchExists(_ name: String) -> Bool {
         Shell.succeeds(
             "git", ["-C", root.path, "show-ref", "--verify", "--quiet", "refs/heads/\(name)"])

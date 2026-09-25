@@ -54,6 +54,14 @@ already has so it is reachable inside the sandbox exactly where it lives outside
 arena new e2e --mount ~/Documents/notes --mount ~/fixtures:ro --env FOO=bar
 ```
 
+A directory every sandbox should have goes in git config as `arena.mount`, which takes as many values as you add ([ADR-009](docs/decisions/ADR-009-standing-mounts-live-in-git-config.md)). Setting it globally is what makes a screenshot path pasted from the host readable by the agent, since the directory appears at its own path inside the sandbox:
+
+```sh
+git config --global --add arena.mount ~/Screenshots:ro
+```
+
+A configured directory that is missing at launch warns and is skipped; one named by `--mount` fails the launch. A global mount is a standing hole in the sandbox's isolation, so `:ro` is worth typing.
+
 Resources default to 6 CPUs, 8 GB and a 2 GB `/dev/shm`, overridable per run with `--cpus`,
 `--memory` and `--shm-size`. The defaults are deliberately past the runtime's, because a
 browser test suite dies under 1 GB and a 64 MB `/dev/shm`

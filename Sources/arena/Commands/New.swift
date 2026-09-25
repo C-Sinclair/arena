@@ -22,7 +22,12 @@ struct New: AsyncParsableCommand {
         name: [.customShort("M"), .long],
         help: ArgumentHelp(
             "Mount an extra host directory, at the same path inside the sandbox. Repeatable.",
-            discussion: "Append ':ro' for a read-only mount."))
+            discussion: """
+                Append ':ro' for a read-only mount. Mount the same directory into every \
+                sandbox by setting it in git config instead, which takes as many values as \
+                you add:
+                    git config --global --add arena.mount ~/Screenshots:ro
+                """))
     var mount: [String] = []
 
     @Option(
@@ -137,7 +142,9 @@ struct New: AsyncParsableCommand {
             image: resolvedImage,
             workdir: worktree,
             resources: resourceOptions.resources,
-            mounts: try mounts(repository: repository, home: home, tools: tools) + extraMounts(),
+            mounts: Self.deduplicated(
+                base: mounts(repository: repository, home: home, tools: tools),
+                extra: try extraMounts(repository: repository)),
             environment: Self.gitOverrides
                 .merging(Self.terminalOverrides) { _, new in new }
                 .merging(Self.refreshOverrides(force: updateClaude)) { _, new in new }
@@ -210,19 +217,58 @@ struct New: AsyncParsableCommand {
     // MARK: - Assembly
 
     /// Extra host directories, each mounted at its own path so it is reachable inside the
-    /// sandbox exactly where it lives outside. A trailing `:ro` is a mount mode, not part of
-    /// the path.
-    private func extraMounts() throws -> [Mount] {
-        try mount.map { specification in
-            let readOnly = specification.hasSuffix(":ro")
-            let path = readOnly ? String(specification.dropLast(3)) : specification
-            let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
-                .standardizedFileURL
-            guard FileManager.default.fileExists(atPath: url.path) else {
-                throw ArenaError.laneFailed("no such directory to mount: \(url.path)")
+    /// sandbox exactly where it lives outside. That is what lets a screenshot path pasted from
+    /// the host be read by the agent without rewriting it.
+    ///
+    /// `arena.mount` in git config comes first and `--mount` after. `New.launch` mounts a
+    /// repeated guest path once, keeping the last, so `-M <path>` overrides the same path
+    /// configured read-only and the sandbox's own mounts always win.
+    private func extraMounts(repository: Repository) throws -> [Mount] {
+        let configured = repository.configAll(Self.mountKey).compactMap { specification -> Mount? in
+            // A configured mount that has gone missing must not stop the launch. The
+            // usual cause is a cloud-backed directory that is not mounted on the host
+            // right now, and a sandbox without it still works for everything else.
+            do {
+                return try Self.parseMount(specification)
+            } catch {
+                warn("\(Self.mountKey): \(error)")
+                return nil
             }
-            return Mount(url, readOnly: readOnly)
         }
+        return configured + (try mount.map(Self.parseMount))
+    }
+
+    static let mountKey = "arena.mount"
+
+    /// Two `--volume` arguments naming the same guest path are taken to fail the launch,
+    /// which is a reading of `container run` rather than something reproduced here. A
+    /// standing `arena.mount` makes the collision easy to reach either way: a repository
+    /// under a configured directory is already mounted by `mounts`.
+    ///
+    /// The sandbox's own mounts are never displaced, because the repository, the home and
+    /// the tool cache are what the sandbox is. Among the rest the last wins, so `--mount`
+    /// beats `arena.mount` for the same path.
+    static func deduplicated(base: [Mount], extra: [Mount]) -> [Mount] {
+        var result = base
+        let reserved = Set(base.map(\.guest))
+
+        for mount in extra where !reserved.contains(mount.guest) {
+            result.removeAll { $0.guest == mount.guest }
+            result.append(mount)
+        }
+        return result
+    }
+
+    /// A trailing `:ro` is a mount mode, not part of the path.
+    private static func parseMount(_ specification: String) throws -> Mount {
+        let readOnly = specification.hasSuffix(":ro")
+        let path = readOnly ? String(specification.dropLast(3)) : specification
+        let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
+            .standardizedFileURL
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            throw ArenaError.laneFailed("no such directory to mount: \(url.path)")
+        }
+        return Mount(url, readOnly: readOnly)
     }
 
     private func extraEnvironment() throws -> [String: String] {

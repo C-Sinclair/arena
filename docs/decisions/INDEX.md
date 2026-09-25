@@ -27,6 +27,7 @@ in [`../designs/INDEX.md`](../designs/INDEX.md) and reference these.
 | [005](ADR-005-size-sandboxes-for-a-browser-suite.md) | Size sandboxes for a browser suite by default | accepted |
 | [006](ADR-006-project-services-run-inside-the-sandbox.md) | Project services run inside the sandbox, on a host-backed state mount | accepted |
 | [008](ADR-008-arena-here-runs-without-git.md) | `arena .` runs without git, and no other command does | accepted |
+| [009](ADR-009-standing-mounts-live-in-git-config.md) | Standing extra mounts live in git config, as `arena.mount` | accepted |
 
 ## Documentation
 
