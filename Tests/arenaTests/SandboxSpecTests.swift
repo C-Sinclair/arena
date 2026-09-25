@@ -158,3 +158,28 @@ struct ImageListingTests {
             images.map(\.reference) == ["arena-demo:abc123", "docker.io/library/alpine:latest"])
     }
 }
+
+@Suite("Agent command")
+struct AgentCommandTests {
+    @Test("the refreshed agent in the persistent home wins over the image's")
+    func homeBinFirst() {
+        #expect(New.command(agent: "claude").hasPrefix("export PATH=$HOME/.local/bin:"))
+    }
+
+    @Test("claude-refresh runs before arena-init, guarded for images without it")
+    func refreshBeforeInit() throws {
+        let command = New.command(agent: "claude")
+        let refresh = try #require(
+            command.range(of: "command -v claude-refresh >/dev/null && claude-refresh; "))
+        let initialise = try #require(command.range(of: "arena-init"))
+        #expect(refresh.lowerBound < initialise.lowerBound)
+    }
+
+    @Test("--update-claude forces a refresh through the environment")
+    func updateClaudeEnvironment() throws {
+        #expect(New.refreshOverrides(force: true) == ["ARENA_CLAUDE_REFRESH": "1"])
+        #expect(New.refreshOverrides(force: false).isEmpty)
+        let parsed = try New.parse(["e2e", "-U"])
+        #expect(parsed.updateClaude)
+    }
+}
