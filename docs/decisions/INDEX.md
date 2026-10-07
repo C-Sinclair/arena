@@ -28,6 +28,7 @@ in [`../designs/INDEX.md`](../designs/INDEX.md) and reference these.
 | [006](ADR-006-project-services-run-inside-the-sandbox.md) | Project services run inside the sandbox, on a host-backed state mount | accepted |
 | [008](ADR-008-arena-here-runs-without-git.md) | `arena .` runs without git, and no other command does | accepted |
 | [009](ADR-009-standing-mounts-live-in-git-config.md) | Standing extra mounts live in git config, as `arena.mount` | accepted |
+| [010](ADR-010-sandboxed-agents-open-tabs-through-a-request-directory.md) | A sandboxed agent opens Herdr tabs and prompts its own children by writing request files, and can do nothing else to Herdr | proposed |
 
 ## Documentation
 

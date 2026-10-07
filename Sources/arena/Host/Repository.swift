@@ -172,6 +172,7 @@ enum ArenaError: Error, CustomStringConvertible {
     case laneFailed(String)
     case buildFailed(String)
     case missingCredentials(String)
+    case refusedRequest(String)
 
     var description: String {
         switch self {
@@ -181,6 +182,7 @@ enum ArenaError: Error, CustomStringConvertible {
         case .laneFailed(let detail): detail
         case .buildFailed(let detail): detail
         case .missingCredentials(let detail): detail
+        case .refusedRequest(let detail): detail
         }
     }
 }

@@ -156,6 +156,22 @@ struct ToolCache {
         }
     }
 
+    /// A script arena itself carries, such as `arena-tab`, cached under a digest of its
+    /// contents so a newer arena relinks `bin/<name>` and an older sandbox keeps the copy it
+    /// started with.
+    func install(script contents: String, named name: String) throws {
+        let version = String(SHA256.hexDigest(of: contents).prefix(12))
+        let file = root.appendingPathComponent(name).appendingPathComponent(version)
+            .appendingPathComponent(name)
+        if !fileManager.isExecutableFile(atPath: file.path) {
+            try fileManager.createDirectory(
+                at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try contents.write(to: file, atomically: true, encoding: .utf8)
+            try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: file.path)
+        }
+        try relink(name, to: "../\(name)/\(version)/\(name)")
+    }
+
     /// Builds the path, runs `produce` when nothing is cached there, and relinks.
     private func cache(
         _ tool: HostTool, version: String, produce: (URL) throws -> Void

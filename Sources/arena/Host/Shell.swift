@@ -117,8 +117,39 @@ enum Shell {
         )
     }
 
+    /// Start a process that outlives arena, for the tab reader `arena new --herdr` leaves
+    /// behind. `nohup` because the terminal that ran `arena new` may close long before the
+    /// sandbox exits.
+    static func spawnDetached(_ executable: String, _ arguments: [String], log: URL) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/nohup")
+        process.arguments = [executable] + arguments
+
+        var env = ProcessInfo.processInfo.environment
+        env["PATH"] = (searchPath + [env["PATH"] ?? ""]).joined(separator: ":")
+        process.environment = env
+
+        if !FileManager.default.fileExists(atPath: log.path) {
+            FileManager.default.createFile(atPath: log.path, contents: nil)
+        }
+        let output = try FileHandle(forWritingTo: log)
+        output.seekToEndOfFile()
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = output
+        process.standardError = output
+
+        try process.run()
+    }
+
     /// Exit status only, for the checks where a non-zero is an answer rather than a fault.
     static func succeeds(_ executable: String, _ arguments: [String]) -> Bool {
         (try? run(executable, arguments)) != nil
     }
+}
+
+/// `herdr pane run` takes a shell string, so this is the one place arena has to quote.
+/// Single-quote everything and escape embedded quotes, rather than guessing which arguments
+/// are safe.
+func shellQuoted(_ argument: String) -> String {
+    "'" + argument.replacingOccurrences(of: "'", with: #"'\''"#) + "'"
 }

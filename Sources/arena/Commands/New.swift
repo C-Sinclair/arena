@@ -67,6 +67,7 @@ struct New: AsyncParsableCommand {
     /// name, building an image to run a lane called "list".
     static let reservedNames: Set<String> = [
         "new", "list", "ls", "remove", "rm", "build", "help", "enter", "attach", "@", ".",
+        TabReaderCommand.configuration.commandName!,
     ]
 
     func run() async throws {
@@ -101,6 +102,17 @@ struct New: AsyncParsableCommand {
     /// Everything after the worktree exists, shared by `new` and `arena .` so both launch
     /// the same sandbox from one `SandboxSpec`, whether directly or through Herdr.
     func launch(sandbox: String, worktree: URL, repository: Repository) throws {
+        let spec = try sandboxSpec(sandbox: sandbox, worktree: worktree, repository: repository)
+        if herdr {
+            try launchInHerdr(spec: spec, worktree: worktree)
+        } else {
+            try Shell.replace(ContainerRuntime.binary, ContainerRuntime.runArguments(spec: spec))
+        }
+    }
+
+    /// Everything a launch prepares on the host, ending in the spec. The tab reader calls
+    /// this for a `--lane` child, so that child is the sandbox `arena new` would have made.
+    func sandboxSpec(sandbox: String, worktree: URL, repository: Repository) throws -> SandboxSpec {
         let resolvedImage =
             try image
             ?? ImageResolver(repository: repository, worktree: worktree).resolve(rebuild: rebuild)
@@ -136,8 +148,9 @@ struct New: AsyncParsableCommand {
                 warn("\(error)")
             }
         }
+        try tools.install(script: ArenaTab.script, named: ArenaTab.name)
 
-        let spec = SandboxSpec(
+        return SandboxSpec(
             name: sandbox,
             image: resolvedImage,
             workdir: worktree,
@@ -148,15 +161,10 @@ struct New: AsyncParsableCommand {
             environment: Self.gitOverrides
                 .merging(Self.terminalOverrides) { _, new in new }
                 .merging(Self.refreshOverrides(force: updateClaude)) { _, new in new }
-                .merging(try extraEnvironment()) { _, new in new },
+                .merging(try extraEnvironment()) { _, new in new }
+                .merging([ArenaTab.sandboxVariable: sandbox]) { _, new in new },
             command: Self.command(agent: agent)
         )
-
-        if herdr {
-            try launchInHerdr(spec: spec, worktree: worktree)
-        } else {
-            try Shell.replace(ContainerRuntime.binary, ContainerRuntime.runArguments(spec: spec))
-        }
     }
 
     /// `container run --name` fails outright when the name is taken, and the message names
@@ -396,24 +404,30 @@ struct New: AsyncParsableCommand {
             + "exec -a \(agent) \(agent) --dangerously-skip-permissions"
     }
 
+    /// The workspace id is only known once the workspace exists, so it joins the spec here
+    /// rather than in `sandboxSpec`. A sandbox launched without Herdr never gets it, which is
+    /// what makes `arena-tab` refuse there rather than leave a request nobody reads.
     private func launchInHerdr(spec: SandboxSpec, worktree: URL) throws {
         let workspace = try Herdr.createWorkspace(cwd: worktree, label: spec.name)
         Herdr.rename(tab: workspace.tab, to: "agent")
+
+        var spec = spec
+        spec.environment[ArenaTab.workspaceVariable] = workspace.id
 
         let argv = ([ContainerRuntime.binary] + ContainerRuntime.runArguments(spec: spec))
             .map(shellQuoted)
             .joined(separator: " ")
         try Herdr.run(pane: workspace.pane, command: argv)
 
+        do {
+            try TabReaderCommand.start(
+                sandbox: spec.name, workspace: workspace.id, worktree: worktree, agent: agent)
+        } catch {
+            warn("could not start the tab reader, so arena-tab will not work here: \(error)")
+        }
+
         Herdr.addTab(workspace: workspace.id, cwd: worktree, label: "shell")
         print("arena: running in Herdr workspace \(spec.name)")
-    }
-
-    /// `herdr pane run` takes a shell string, so this is the one place arena has to quote.
-    /// Single-quote everything and escape embedded quotes, rather than guessing which
-    /// arguments are safe.
-    private func shellQuoted(_ argument: String) -> String {
-        "'" + argument.replacingOccurrences(of: "'", with: #"'\''"#) + "'"
     }
 
     private func warn(_ message: String) {

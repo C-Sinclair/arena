@@ -155,8 +155,39 @@ struct SandboxHome {
         perModel[Self.defaultModelID] = ["effortLevel": Self.defaultEffort]
         settings["modelSettings"] = perModel
 
+        settings = Self.mergingStatusHooks(into: settings)
+
         let data = try JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted])
         try data.write(to: file)
+    }
+
+    /// The hooks through which a child `arena-tab` started reports back. See ADR-010.
+    /// `UserPromptSubmit` is what returns a child to `working` when someone types into its
+    /// pane directly, which the reader never hears about.
+    static let statusHooks: [(event: String, argument: String)] = [
+        ("Stop", "stop"),
+        ("Notification", "notification"),
+        ("UserPromptSubmit", "prompt"),
+    ]
+
+    /// Adds arena's hooks beside whatever the sandbox home already has. A group whose
+    /// command is one of arena's is replaced, so a rerun does not stack duplicates, and every
+    /// other group, event and key is kept.
+    static func mergingStatusHooks(into settings: [String: Any]) -> [String: Any] {
+        var settings = settings
+        var hooks = settings["hooks"] as? [String: Any] ?? [:]
+
+        for (event, argument) in statusHooks {
+            let command = ArenaTab.hookCommand(argument)
+            let groups = (hooks[event] as? [[String: Any]] ?? []).filter { group in
+                let entries = group["hooks"] as? [[String: Any]] ?? []
+                return !entries.contains { ($0["command"] as? String) == command }
+            }
+            hooks[event] = groups + [["hooks": [["type": "command", "command": command]]]]
+        }
+
+        settings["hooks"] = hooks
+        return settings
     }
 
     private var agentCredentialsFile: URL {
