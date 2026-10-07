@@ -155,6 +155,12 @@ struct SandboxHome {
         perModel[Self.defaultModelID] = ["effortLevel": Self.defaultEffort]
         settings["modelSettings"] = perModel
 
+        // The host's settings.json turns off the agent's trailers on commits and PRs, and it
+        // is not mounted, so every sandbox commit carried "Co-Authored-By: Claude" until this
+        // was seeded here. includeCoAuthoredBy is the older key, still read by older agents.
+        settings["attribution"] = ["commit": "", "pr": ""]
+        settings["includeCoAuthoredBy"] = false
+
         let data = try JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted])
         try data.write(to: file)
     }
