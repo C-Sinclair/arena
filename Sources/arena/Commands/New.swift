@@ -69,6 +69,7 @@ struct New: AsyncParsableCommand {
     /// name, building an image to run a lane called "list".
     static let reservedNames: Set<String> = [
         "new", "list", "ls", "remove", "rm", "build", "help", "enter", "attach", "@", ".",
+        "broker",
     ]
 
     func run() async throws {
@@ -150,12 +151,13 @@ struct New: AsyncParsableCommand {
             environment: Self.gitOverrides
                 .merging(Self.terminalOverrides) { _, new in new }
                 .merging(Self.refreshOverrides(force: updateClaude)) { _, new in new }
+                .merging(herdr ? ["ARENA_BROKER": "1"] : [:]) { _, new in new }
                 .merging(try extraEnvironment()) { _, new in new },
             command: Self.command(agent: agent)
         )
 
         if herdr {
-            try launchInHerdr(spec: spec, worktree: worktree)
+            try launchInHerdr(spec: spec, worktree: worktree, state: home.state)
         } else {
             try Shell.replace(ContainerRuntime.binary, ContainerRuntime.runArguments(spec: spec))
         }
@@ -398,7 +400,7 @@ struct New: AsyncParsableCommand {
             + "exec -a \(agent) \(agent) --dangerously-skip-permissions"
     }
 
-    private func launchInHerdr(spec: SandboxSpec, worktree: URL) throws {
+    private func launchInHerdr(spec: SandboxSpec, worktree: URL, state: URL) throws {
         let workspace = try Herdr.createWorkspace(cwd: worktree, label: spec.name)
         Herdr.rename(tab: workspace.tab, to: "agent")
 
@@ -408,6 +410,15 @@ struct New: AsyncParsableCommand {
         try Herdr.run(pane: workspace.pane, command: argv)
 
         Herdr.addTab(workspace: workspace.id, cwd: worktree, label: "shell")
+
+        // Only the Herdr launch gets a broker: a split or a hop needs a Herdr pane to open
+        // beside, and the direct launch has none. See ADR-010.
+        do {
+            try Broker.startDetached(
+                state: state, sandbox: spec.name, pane: workspace.pane, workspace: workspace.id)
+        } catch {
+            warn("broker did not start, so arena-split and arena-tab will go unanswered: \(error)")
+        }
         print("arena: running in Herdr workspace \(spec.name)")
     }
 
