@@ -78,7 +78,7 @@ struct New: AsyncParsableCommand {
     /// name, building an image to run a lane called "list".
     static let reservedNames: Set<String> = [
         "new", "list", "ls", "remove", "rm", "build", "help", "enter", "attach", "@", ".",
-        "broker",
+        "broker", "projects",
     ]
 
     func run() async throws {

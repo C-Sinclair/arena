@@ -17,7 +17,7 @@ struct Arena: AsyncParsableCommand {
         version: "0.1.0",
         subcommands: [
             New.self, Current.self, Here.self, Enter.self, List.self, Remove.self, Build.self,
-            BrokerCommand.self,
+            BrokerCommand.self, Projects.self,
         ],
         defaultSubcommand: New.self
     )
