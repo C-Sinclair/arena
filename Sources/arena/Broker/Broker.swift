@@ -91,7 +91,75 @@ struct Broker {
     }
 
     func perform(_ action: BrokerAction) throws {
-        log("\(action) has no handler yet")
+        switch action {
+        case .split(let name, let brief, let model, let effort):
+            try split(name: name, brief: brief, model: model, effort: effort)
+        case .report(let name):
+            try report(name: name)
+        case .hop:
+            log("hop has no handler yet")
+        }
+    }
+
+    // MARK: - split and report
+
+    private func split(name: String, brief: String, model: String, effort: String) throws {
+        let file = BrokerProtocol.fileName(name)
+        try (brief + Self.briefFooter(name: name)).write(
+            to: briefs.appendingPathComponent("\(file).md"), atomically: true, encoding: .utf8)
+
+        let pane = try Herdr.split(pane: leaderPane, cwd: state)
+        let argv =
+            [ContainerRuntime.binary]
+            + Self.splitArguments(
+                sandbox: sandbox, name: name, model: model, effort: effort)
+        try Herdr.run(pane: pane, command: argv.map(New.shellQuoted).joined(separator: " "))
+        log("split '\(name)' (\(model), \(effort)) in pane \(pane)")
+    }
+
+    /// The `container exec` that starts a split agent. The brief is read from the file
+    /// inside the container rather than passed as an argument, so its text never reaches a
+    /// command line on either side.
+    static func splitArguments(sandbox: String, name: String, model: String, effort: String)
+        -> [String]
+    {
+        let brief = "\(guestState)/briefs/\(BrokerProtocol.fileName(name)).md"
+        let command =
+            "export PATH=$HOME/.local/bin:\(ToolCache.guestBin):$PATH; "
+            + "exec -a claude claude --dangerously-skip-permissions "
+            + "--model \(model) --effort \(effort) \"$(cat \(brief))\""
+        return ContainerRuntime.execArguments(
+            id: sandbox, workdir: nil,
+            environment: New.terminalOverrides.merging(["ARENA_BROKER": "1"]) { _, new in new },
+            command: command)
+    }
+
+    static func briefFooter(name: String) -> String {
+        """
+
+
+        ---
+        You are a split agent named `\(name)`, working in the same container and worktree as \
+        the agent that asked for you. Do not commit. When you are done, write your findings \
+        as Markdown to a file and run `arena-report \(name) <file>`. That copies it to \
+        \(guestState)/findings/\(BrokerProtocol.fileName(name)).md and tells the leader.
+
+        """
+    }
+
+    static func findingsMessage(name: String) -> String {
+        "findings ready at \(guestState)/findings/\(BrokerProtocol.fileName(name)).md"
+    }
+
+    /// The text is fixed here, so a sandbox can make the leader read one file and nothing
+    /// else. See ADR-010.
+    private func report(name: String) throws {
+        let file = findings.appendingPathComponent("\(BrokerProtocol.fileName(name)).md")
+        guard fileManager.fileExists(atPath: file.path) else {
+            throw BrokerRejection(reason: "report '\(name)': \(file.path) does not exist")
+        }
+        try Herdr.prompt(agent: leaderPane, text: Self.findingsMessage(name: name))
+        log("reported '\(name)' to pane \(leaderPane)")
     }
 
     private func sandboxRunning() -> Bool {

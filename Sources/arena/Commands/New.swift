@@ -405,7 +405,7 @@ struct New: AsyncParsableCommand {
         Herdr.rename(tab: workspace.tab, to: "agent")
 
         let argv = ([ContainerRuntime.binary] + ContainerRuntime.runArguments(spec: spec))
-            .map(shellQuoted)
+            .map(Self.shellQuoted)
             .joined(separator: " ")
         try Herdr.run(pane: workspace.pane, command: argv)
 
@@ -425,7 +425,7 @@ struct New: AsyncParsableCommand {
     /// `herdr pane run` takes a shell string, so this is the one place arena has to quote.
     /// Single-quote everything and escape embedded quotes, rather than guessing which
     /// arguments are safe.
-    private func shellQuoted(_ argument: String) -> String {
+    static func shellQuoted(_ argument: String) -> String {
         "'" + argument.replacingOccurrences(of: "'", with: #"'\''"#) + "'"
     }
 
