@@ -96,8 +96,8 @@ struct Broker {
             try split(name: name, brief: brief, model: model, effort: effort)
         case .report(let name):
             try report(name: name)
-        case .hop:
-            log("hop has no handler yet")
+        case .hop(let repository):
+            try hop(to: repository)
         }
     }
 
@@ -160,6 +160,50 @@ struct Broker {
         }
         try Herdr.prompt(agent: leaderPane, text: Self.findingsMessage(name: name))
         log("reported '\(name)' to pane \(leaderPane)")
+    }
+
+    // MARK: - hop
+
+    /// A new sandbox for another repository, in a tab of the leader's workspace, once the
+    /// user has said yes. It runs `arena .`, so it gets its own container and broker.
+    private func hop(to repository: URL) throws {
+        var isDirectory: ObjCBool = false
+        guard fileManager.fileExists(atPath: repository.path, isDirectory: &isDirectory),
+            isDirectory.boolValue
+        else {
+            throw BrokerRejection(reason: "hop: \(repository.path) is not a directory")
+        }
+        guard Self.confirm(hopTo: repository, from: sandbox) else {
+            log("hop to \(repository.path) declined")
+            return
+        }
+
+        let label = repository.lastPathComponent
+        let pane = try Herdr.createTab(workspace: workspace, cwd: repository, label: label)
+        // Blocks this broker while the other repository's image builds. Requests queue in
+        // the spool meanwhile; none is lost.
+        try Shell.run(
+            Bundle.main.executableURL?.path ?? "arena",
+            [".", "--herdr-pane", pane, "--herdr-workspace", workspace],
+            workingDirectory: repository)
+        log("hopped to \(repository.path) in pane \(pane)")
+    }
+
+    /// A macOS dialog rather than a Herdr prompt: Herdr has no confirmation command, and a
+    /// prompt typed into a pane could be answered by the agent in it. The path is passed as
+    /// an argument to the script, never spliced into it.
+    static func confirm(hopTo repository: URL, from sandbox: String) -> Bool {
+        let message =
+            "The sandbox \(sandbox) asks to open \(repository.path) in a new arena sandbox."
+        return Shell.succeeds(
+            "osascript",
+            [
+                "-e", "on run argv",
+                "-e",
+                "display dialog (item 1 of argv) with title \"arena\" buttons {\"Refuse\", \"Open\"} default button \"Refuse\" cancel button \"Refuse\"",
+                "-e", "end run",
+                message,
+            ])
     }
 
     private func sandboxRunning() -> Bool {

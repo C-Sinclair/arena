@@ -39,6 +39,15 @@ struct New: AsyncParsableCommand {
         help: "Run the agent in a new Herdr workspace instead of here.")
     var herdr = false
 
+    /// Set by the broker's `hop`, which has already made the tab this sandbox runs in.
+    @Option(name: .long, help: .hidden)
+    var herdrPane: String?
+
+    @Option(name: .long, help: .hidden)
+    var herdrWorkspace: String?
+
+    private var launchesInHerdr: Bool { herdr || herdrPane != nil }
+
     @Option(name: .long, help: "Image to run, overriding the repository's own Dockerfile.")
     var image: String?
 
@@ -151,12 +160,12 @@ struct New: AsyncParsableCommand {
             environment: Self.gitOverrides
                 .merging(Self.terminalOverrides) { _, new in new }
                 .merging(Self.refreshOverrides(force: updateClaude)) { _, new in new }
-                .merging(herdr ? ["ARENA_BROKER": "1"] : [:]) { _, new in new }
+                .merging(launchesInHerdr ? ["ARENA_BROKER": "1"] : [:]) { _, new in new }
                 .merging(try extraEnvironment()) { _, new in new },
             command: Self.command(agent: agent)
         )
 
-        if herdr {
+        if launchesInHerdr {
             try launchInHerdr(spec: spec, worktree: worktree, state: home.state)
         } else {
             try Shell.replace(ContainerRuntime.binary, ContainerRuntime.runArguments(spec: spec))
@@ -401,15 +410,22 @@ struct New: AsyncParsableCommand {
     }
 
     private func launchInHerdr(spec: SandboxSpec, worktree: URL, state: URL) throws {
-        let workspace = try Herdr.createWorkspace(cwd: worktree, label: spec.name)
-        Herdr.rename(tab: workspace.tab, to: "agent")
+        let workspace: Herdr.Workspace
+        if let herdrPane, let herdrWorkspace {
+            workspace = Herdr.Workspace(id: herdrWorkspace, tab: "", pane: herdrPane)
+        } else {
+            workspace = try Herdr.createWorkspace(cwd: worktree, label: spec.name)
+            Herdr.rename(tab: workspace.tab, to: "agent")
+        }
 
         let argv = ([ContainerRuntime.binary] + ContainerRuntime.runArguments(spec: spec))
             .map(Self.shellQuoted)
             .joined(separator: " ")
         try Herdr.run(pane: workspace.pane, command: argv)
 
-        Herdr.addTab(workspace: workspace.id, cwd: worktree, label: "shell")
+        if herdrPane == nil {
+            Herdr.addTab(workspace: workspace.id, cwd: worktree, label: "shell")
+        }
 
         // Only the Herdr launch gets a broker: a split or a hop needs a Herdr pane to open
         // beside, and the direct launch has none. See ADR-010.
