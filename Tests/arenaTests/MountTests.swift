@@ -32,7 +32,9 @@ struct MountDeduplicationTests {
 
     @Test("a path given twice is mounted once")
     func repeated() {
-        let guests = guests([mount("/Users/me/Screenshots", readOnly: true), mount("/Users/me/Screenshots")])
+        let guests = guests([
+            mount("/Users/me/Screenshots", readOnly: true), mount("/Users/me/Screenshots"),
+        ])
         #expect(guests.filter { $0 == "/Users/me/Screenshots" }.count == 1)
     }
 

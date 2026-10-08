@@ -57,7 +57,9 @@ struct New: AsyncParsableCommand {
 
     @Flag(
         name: [.customShort("U"), .long],
-        help: "Reinstall the agent into the sandbox home before launch, however recent the last install.")
+        help:
+            "Reinstall the agent into the sandbox home before launch, however recent the last install."
+    )
     var updateClaude = false
 
     @OptionGroup var resourceOptions: ResourceOptions
