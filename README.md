@@ -67,6 +67,20 @@ Resources default to 6 CPUs, 8 GB and a 2 GB `/dev/shm`, overridable per run wit
 browser test suite dies under 1 GB and a 64 MB `/dev/shm`
 ([ADR-005](docs/decisions/ADR-005-size-sandboxes-for-a-browser-suite.md)).
 
+## Agents asking the host for more
+
+A sandbox launched with `--herdr` gets a broker: `arena broker`, a host process that reads JSON requests the sandbox writes into `/var/lib/arena/spawn` ([ADR-010](docs/decisions/ADR-010-sandboxed-agents-reach-the-host-through-a-request-directory.md)). The sandbox has no `herdr` and no socket to it. It can ask for three things, each with one script on its PATH:
+
+| Inside the sandbox | What the host does |
+|---|---|
+| `arena-split <name> <brief-file\|->` | Opens a Herdr split beside the agent and starts `claude --model opus --effort xhigh` there, inside the same container, with the brief as its first prompt. `--model` and `--effort` override. |
+| `arena-report <name> <file\|->` | Run by the split agent. Copies the file to `/var/lib/arena/findings/<name>.md` and types `findings ready at /var/lib/arena/findings/<name>.md` into the leader's pane. |
+| `arena-tab '~/Repos/ORG/REPO'` | Shows a macOS dialog. On "Open", starts that repository's own sandbox in a new tab of the same workspace. Any other path is refused. |
+
+The intended shape is a leader agent at low effort in one sandbox per repository, handing hard problems to an Opus split and reading its findings file back. `arena projects` lists every `~/Repos/ORG/REPO` with whether it has `.arena/Dockerfile` and whether a sandbox is running it; `--json` for scripts. The broker logs to `~/.arena/state/<repo>/broker.log` and moves refused requests to `spawn/rejected/`.
+
+The three scripts are not in this repository. They live beside `arena-spawn` in the image's directory in the dotfiles repository. `arena-spawn`'s own requests carry no `kind` and the broker refuses them. None of this has been run against a live sandbox.
+
 ## Images
 
 A repository declares its own toolchain by committing `.arena/Dockerfile`. arena builds it with

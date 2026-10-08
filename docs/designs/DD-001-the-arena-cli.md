@@ -116,6 +116,17 @@ None of these have been taken.
    longer referencing sbx. *Not started.*
 4. **Install path.** `swift build -c release` and a symlink, or a Homebrew formula. Undecided.
 5. **The measurements above.** *Not started.*
+6. **The broker and the sandbox-side verbs.** `arena broker` answers `split`, `report` and
+   `hop` requests from `/var/lib/arena/spawn`, as
+   [ADR-010](../decisions/ADR-010-sandboxed-agents-reach-the-host-through-a-request-directory.md)
+   sets out. Inside the sandbox they are three fish scripts kept with the image in the dotfiles
+   repository: `arena-split <name> <brief>` asks for an Opus xhigh agent in a Herdr split in the
+   same container; `arena-report <name> <file>` writes `/var/lib/arena/findings/<name>.md` and
+   has the leader told; `arena-tab ~/Repos/ORG/REPO` asks, behind a host dialog, for another
+   repository's sandbox in a new tab. `arena projects [--json]` lists what `arena-tab` can
+   open. Checkable by `BrokerProtocolTests` for validation, and by running a broker against a
+   scratch state directory, which refuses bad requests and stops when its sandbox is gone.
+   *Written; no split, report or hop has been performed against a live Herdr or container.*
 
 ## Where it stops
 
@@ -128,6 +139,11 @@ None of these have been taken.
   launches anyway and the failure presents as a confusing test error.
 - **No cleanup command.** Old digest-tagged images and `~/.arena/state/<repo>` directories
   accumulate with nothing to prune them.
+- **No split, report or hop has run for real.** The JSON `herdr pane split` and `herdr tab
+  create` print is unchecked, as is whether `herdr agent prompt` takes a pane id and whether
+  `claude` takes `--effort`. See ADR-010's Evidence section.
+- **One broker per repository, not per sandbox.** Two lanes of one repository share
+  `~/.arena/state/<repo>/spawn`, and the first broker answers both.
 - **Herdr's pane command is still a shell string.** arena quotes every argument, which is
   better than concatenation, but the interface is still a string.
 
