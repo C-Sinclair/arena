@@ -52,4 +52,57 @@ enum Herdr {
                 "--label", label, "--no-focus",
             ])
     }
+
+    /// A new pane to the right of `pane`, without taking focus from the agent in it.
+    static func split(pane: String, cwd: URL) throws -> String {
+        let json = try Shell.run(
+            "herdr",
+            ["pane", "split", pane, "--direction", "right", "--cwd", cwd.path, "--no-focus"])
+        guard let id = paneID(in: json) else {
+            throw ArenaError.laneFailed("herdr pane split returned no pane_id: \(json)")
+        }
+        return id
+    }
+
+    /// Like `addTab`, but returns the new tab's pane for the caller to run something in.
+    static func createTab(workspace: String, cwd: URL, label: String) throws -> String {
+        let json = try Shell.run(
+            "herdr",
+            [
+                "tab", "create", "--workspace", workspace, "--cwd", cwd.path,
+                "--label", label, "--no-focus",
+            ])
+        guard let id = paneID(in: json) else {
+            throw ArenaError.laneFailed("herdr tab create returned no pane_id: \(json)")
+        }
+        return id
+    }
+
+    static func prompt(agent target: String, text: String) throws {
+        try Shell.run("herdr", ["agent", "prompt", target, text])
+    }
+
+    /// The first `pane_id` anywhere in a Herdr result. `workspace create` nests it under
+    /// `root_pane`; the shape `pane split` and `tab create` print has not been checked, so
+    /// this does not assume one.
+    static func paneID(in json: String) -> String? {
+        guard let root = try? JSONSerialization.jsonObject(with: Data(json.utf8)) else {
+            return nil
+        }
+        return firstValue(forKey: "pane_id", in: root)
+    }
+
+    private static func firstValue(forKey key: String, in value: Any) -> String? {
+        if let object = value as? [String: Any] {
+            if let found = object[key] as? String { return found }
+            for name in object.keys.sorted() {
+                if let found = firstValue(forKey: key, in: object[name]!) { return found }
+            }
+        } else if let array = value as? [Any] {
+            for element in array {
+                if let found = firstValue(forKey: key, in: element) { return found }
+            }
+        }
+        return nil
+    }
 }

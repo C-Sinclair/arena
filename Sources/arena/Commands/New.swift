@@ -39,6 +39,15 @@ struct New: AsyncParsableCommand {
         help: "Run the agent in a new Herdr workspace instead of here.")
     var herdr = false
 
+    /// Set by the broker's `hop`, which has already made the tab this sandbox runs in.
+    @Option(name: .long, help: .hidden)
+    var herdrPane: String?
+
+    @Option(name: .long, help: .hidden)
+    var herdrWorkspace: String?
+
+    private var launchesInHerdr: Bool { herdr || herdrPane != nil }
+
     @Option(name: .long, help: "Image to run, overriding the repository's own Dockerfile.")
     var image: String?
 
@@ -57,7 +66,9 @@ struct New: AsyncParsableCommand {
 
     @Flag(
         name: [.customShort("U"), .long],
-        help: "Reinstall the agent into the sandbox home before launch, however recent the last install.")
+        help:
+            "Reinstall the agent into the sandbox home before launch, however recent the last install."
+    )
     var updateClaude = false
 
     @OptionGroup var resourceOptions: ResourceOptions
@@ -67,6 +78,7 @@ struct New: AsyncParsableCommand {
     /// name, building an image to run a lane called "list".
     static let reservedNames: Set<String> = [
         "new", "list", "ls", "remove", "rm", "build", "help", "enter", "attach", "@", ".",
+        "broker", "projects",
     ]
 
     func run() async throws {
@@ -148,12 +160,13 @@ struct New: AsyncParsableCommand {
             environment: Self.gitOverrides
                 .merging(Self.terminalOverrides) { _, new in new }
                 .merging(Self.refreshOverrides(force: updateClaude)) { _, new in new }
+                .merging(launchesInHerdr ? ["ARENA_BROKER": "1"] : [:]) { _, new in new }
                 .merging(try extraEnvironment()) { _, new in new },
             command: Self.command(agent: agent)
         )
 
-        if herdr {
-            try launchInHerdr(spec: spec, worktree: worktree)
+        if launchesInHerdr {
+            try launchInHerdr(spec: spec, worktree: worktree, state: home.state)
         } else {
             try Shell.replace(ContainerRuntime.binary, ContainerRuntime.runArguments(spec: spec))
         }
@@ -396,23 +409,39 @@ struct New: AsyncParsableCommand {
             + "exec -a \(agent) \(agent) --dangerously-skip-permissions"
     }
 
-    private func launchInHerdr(spec: SandboxSpec, worktree: URL) throws {
-        let workspace = try Herdr.createWorkspace(cwd: worktree, label: spec.name)
-        Herdr.rename(tab: workspace.tab, to: "agent")
+    private func launchInHerdr(spec: SandboxSpec, worktree: URL, state: URL) throws {
+        let workspace: Herdr.Workspace
+        if let herdrPane, let herdrWorkspace {
+            workspace = Herdr.Workspace(id: herdrWorkspace, tab: "", pane: herdrPane)
+        } else {
+            workspace = try Herdr.createWorkspace(cwd: worktree, label: spec.name)
+            Herdr.rename(tab: workspace.tab, to: "agent")
+        }
 
         let argv = ([ContainerRuntime.binary] + ContainerRuntime.runArguments(spec: spec))
-            .map(shellQuoted)
+            .map(Self.shellQuoted)
             .joined(separator: " ")
         try Herdr.run(pane: workspace.pane, command: argv)
 
-        Herdr.addTab(workspace: workspace.id, cwd: worktree, label: "shell")
+        if herdrPane == nil {
+            Herdr.addTab(workspace: workspace.id, cwd: worktree, label: "shell")
+        }
+
+        // Only the Herdr launch gets a broker: a split or a hop needs a Herdr pane to open
+        // beside, and the direct launch has none. See ADR-010.
+        do {
+            try Broker.startDetached(
+                state: state, sandbox: spec.name, pane: workspace.pane, workspace: workspace.id)
+        } catch {
+            warn("broker did not start, so arena-split and arena-tab will go unanswered: \(error)")
+        }
         print("arena: running in Herdr workspace \(spec.name)")
     }
 
     /// `herdr pane run` takes a shell string, so this is the one place arena has to quote.
     /// Single-quote everything and escape embedded quotes, rather than guessing which
     /// arguments are safe.
-    private func shellQuoted(_ argument: String) -> String {
+    static func shellQuoted(_ argument: String) -> String {
         "'" + argument.replacingOccurrences(of: "'", with: #"'\''"#) + "'"
     }
 
